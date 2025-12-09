@@ -1,7 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime, time  # <-- Добавили datetime и time
 import uuid
 
 from app.database import get_db
@@ -24,16 +25,12 @@ async def upload_transactions(
         raise HTTPException(status_code=400, detail="Only CSV supported in MVP")
 
     contents = await file.read()
-
-    # 1. Парсинг
     raw_transactions = parse_csv(contents)
 
     count = 0
     for item in raw_transactions:
-        # 2. Классификация
         cat_id = classifier.categorize(db, item['description'], item['amount'])
 
-        # 3. Сохранение
         db_txn = Transaction(
             user_id=TEST_USER_ID,
             date=item['date'],
@@ -48,12 +45,7 @@ async def upload_transactions(
         count += 1
 
     db.commit()
-
-    return {
-        "status": "success",
-        "imported_count": count,
-        "message": "File processed successfully"
-    }
+    return {"status": "success", "imported_count": count, "message": "File processed successfully"}
 
 
 @router.get("/", response_model=List[TransactionResponse])
@@ -66,11 +58,18 @@ def get_transactions(
 ):
     query = db.query(Transaction).filter(Transaction.user_id == TEST_USER_ID)
 
-    # Применяем фильтры по дате, если они переданы
+    # ЖЕЛЕЗОБЕТОННАЯ ЛОГИКА ДАТ:
+    # Преобразуем date -> datetime
+    # start_date -> 2025-12-01 00:00:00
+    # end_date -> 2025-12-31 23:59:59
+
     if start_date:
-        query = query.filter(Transaction.date >= start_date)
+        start_dt = datetime.combine(start_date, time.min)
+        query = query.filter(Transaction.date >= start_dt)
+
     if end_date:
-        query = query.filter(Transaction.date <= end_date)
+        end_dt = datetime.combine(end_date, time.max)
+        query = query.filter(Transaction.date <= end_dt)
 
     return query.order_by(Transaction.date.desc()).offset(skip).limit(limit).all()
 
@@ -80,7 +79,6 @@ def delete_transaction(transaction_id: str, db: Session = Depends(get_db)):
     txn = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
-
     db.delete(txn)
     db.commit()
     return {"status": "success", "message": "Deleted"}
@@ -96,7 +94,6 @@ def update_transaction(
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
-    # Обновляем поля, если они переданы
     if update_data.category_id is not None:
         txn.category_id = update_data.category_id
     if update_data.description is not None:

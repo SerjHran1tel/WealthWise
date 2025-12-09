@@ -4,33 +4,42 @@ import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
 export const TrendChart = ({ transactions }) => {
-  // Группировка транзакций по дням
   const groupedData = transactions
-    .filter(t => !t.is_income) // Смотрим только расходы
+    .filter(t => !t.is_income)
     .reduce((acc, t) => {
-      // Преобразуем строку даты в формат YYYY-MM-DD для ключа
-      const dateKey = t.date.split('T')[0];
-      acc[dateKey] = (acc[dateKey] || 0) + t.amount;
+      // Безопасное извлечение даты
+      try {
+        const dateKey = t.date.split('T')[0];
+        acc[dateKey] = (acc[dateKey] || 0) + t.amount;
+      } catch (e) {
+        // Игнорируем ошибки парсинга
+      }
       return acc;
     }, {});
 
-  // Преобразуем объект в массив и сортируем по дате
   const data = Object.keys(groupedData)
     .sort()
     .map(dateKey => ({
       date: dateKey,
       amount: groupedData[dateKey],
-      // Форматированная дата для оси X (например, "10 дек")
       displayDate: format(parseISO(dateKey), 'd MMM', { locale: ru })
     }));
 
-  if (data.length === 0) return null;
+  if (data.length === 0) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-sm mt-6 flex items-center justify-center text-gray-400" style={{ height: 300 }}>
+        Нет данных для графика
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm h-80 flex flex-col mt-6">
+    <div className="bg-white p-6 rounded-lg shadow-sm mt-6 flex flex-col">
       <h3 className="text-lg font-semibold mb-4 text-gray-800">Динамика расходов</h3>
-      <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
+
+      {/* ЯВНАЯ ВЫСОТА */}
+      <div style={{ width: '100%', height: 300 }}>
+        <ResponsiveContainer>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="displayDate" fontSize={12} tickLine={false} />

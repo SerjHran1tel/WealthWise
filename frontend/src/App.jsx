@@ -4,58 +4,78 @@ import { TransactionList } from './components/TransactionList';
 import { CategoryChart } from './components/CategoryChart';
 import { SummaryCards } from './components/SummaryCards';
 import { TrendChart } from './components/TrendChart';
-import { transactionService, categoryService } from './services/api';
+import { BudgetList } from './components/BudgetList';
+import { transactionService, categoryService, budgetService } from './services/api';
 import { LayoutDashboard, Calendar } from 'lucide-react';
 
 function App() {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Состояние для фильтра даты (по умолчанию - текущий месяц)
-  const [dateFilter, setDateFilter] = useState(() => {
-    const now = new Date();
-    // Формат YYYY-MM для input type="month"
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  // Дефолтный фильтр (можно менять вручную в коде, если нужно)
+  const [dateFilter, setDateFilter] = useState("2025-12");
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      // 1. Вычисляем start_date и end_date на основе выбранного месяца
-      const [year, month] = dateFilter.split('-');
-      const startDate = `${year}-${month}-01`;
-      // Конец месяца: берем "0-й день" следующего месяца, JS сам поймет что это последний день текущего
-      const endDate = new Date(year, month, 0).toISOString().split('T')[0];
-
-      // 2. Запрашиваем данные параллельно
-      const [transData, catsData] = await Promise.all([
-        transactionService.getAll({ start_date: startDate, end_date: endDate }),
-        categoryService.getAll()
-      ]);
-
-      setTransactions(transData);
-      setCategories(catsData);
-    } catch (error) {
-      console.error("Failed to fetch data", error);
-    } finally {
-      setLoading(false);
-    }
+  const getPeriodBounds = () => {
+    if (!dateFilter) return { startDate: '', endDate: '' };
+    const [year, month] = dateFilter.split('-');
+    const lastDay = new Date(year, month, 0).getDate();
+    return {
+      startDate: `${year}-${month}-01`,
+      endDate: `${year}-${month}-${lastDay}`
+    };
   };
 
-  // Перезагрузка данных при изменении фильтра даты
+  // --- НОВАЯ ЛОГИКА ЗАГРУЗКИ ---
+  const fetchData = async () => {
+    setLoading(true);
+    const { startDate, endDate } = getPeriodBounds();
+    console.log(`Запрос данных за: ${startDate} — ${endDate}`);
+
+    // 1. Грузим категории (нужны для всего)
+    try {
+      const catsData = await categoryService.getAll();
+      setCategories(catsData);
+    } catch (e) {
+      console.error("Ошибка загрузки категорий:", e);
+    }
+
+    // 2. Грузим транзакции (НЕЗАВИСИМО)
+    try {
+      const transData = await transactionService.getAll({ start_date: startDate, end_date: endDate });
+      console.log("Успешно загружено транзакций:", transData.length);
+      setTransactions(transData);
+    } catch (e) {
+      console.error("Ошибка загрузки транзакций:", e);
+    }
+
+    // 3. Грузим бюджеты (НЕЗАВИСИМО)
+    try {
+      const budgetsData = await budgetService.getStatus(startDate, endDate);
+      setBudgets(budgetsData);
+    } catch (e) {
+      console.error("Ошибка загрузки бюджетов (возможно нет данных или ошибка сервера):", e);
+      // Не ломаем приложение, просто оставляем бюджеты пустыми
+      setBudgets([]);
+    }
+
+    setLoading(false);
+  };
+  // -----------------------------
+
   useEffect(() => {
     fetchData();
   }, [dateFilter]);
 
-  // Функция для обновления (например после загрузки файла или редактирования)
   const handleRefresh = () => {
     fetchData();
   };
 
+  const { startDate, endDate } = getPeriodBounds();
+
   return (
     <div className="min-h-screen pb-10 font-sans text-gray-900 bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm mb-8 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -65,52 +85,64 @@ function App() {
             <h1 className="text-2xl font-bold text-gray-800">WealthWise</h1>
           </div>
 
-          {/* Фильтр даты */}
-          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg border border-gray-200">
-            <Calendar size={18} className="text-gray-500 ml-2" />
-            <input
-              type="month"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="bg-transparent border-none text-sm focus:ring-0 p-2 text-gray-700 outline-none cursor-pointer"
-            />
+          <div className="flex items-center gap-4">
+            <div className="text-xs text-gray-500 hidden md:block">
+              Период: {startDate} — {endDate}
+            </div>
+
+            <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg border border-gray-200">
+              <Calendar size={18} className="text-gray-500 ml-2" />
+              <input
+                type="month"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="bg-transparent border-none text-sm focus:ring-0 p-2 text-gray-700 outline-none cursor-pointer"
+              />
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4">
-        {/* Сводные карточки (Баланс, Доход, Расход) */}
+        {/* Карточки отобразятся, если transactions загрузились */}
         <SummaryCards transactions={transactions} />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Левая колонка: Загрузка + Графики */}
-          <div className="md:col-span-1 space-y-6">
+          <div className="md:col-span-1 flex flex-col gap-6">
             <FileUpload onUploadSuccess={handleRefresh} />
 
+            <BudgetList
+              budgets={budgets}
+              categories={categories}
+              dateRange={{ startDate, endDate }}
+              onUpdate={handleRefresh}
+            />
+
             <CategoryChart transactions={transactions} />
-            <TrendChart transactions={transactions} />
           </div>
 
-          {/* Правая колонка: Список операций */}
-          <div className="md:col-span-2">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">
-                Операции за период ({transactions.length})
-              </h2>
-            </div>
+          <div className="md:col-span-2 flex flex-col gap-6">
+             <TrendChart transactions={transactions} />
 
-            {loading ? (
-              <div className="text-center p-10 text-gray-500 bg-white rounded-lg shadow-sm">
-                Загрузка данных...
+             <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-800">
+                  Операции за период ({transactions.length})
+                </h2>
               </div>
-            ) : (
-              <TransactionList
-                transactions={transactions}
-                categories={categories}
-                onTransactionUpdate={handleRefresh}
-              />
-            )}
+
+              {loading && transactions.length === 0 ? (
+                <div className="text-center p-10 text-gray-500 bg-white rounded-lg shadow-sm">
+                  Загрузка данных...
+                </div>
+              ) : (
+                <TransactionList
+                  transactions={transactions}
+                  categories={categories}
+                  onTransactionUpdate={handleRefresh}
+                />
+              )}
+            </div>
           </div>
         </div>
       </main>

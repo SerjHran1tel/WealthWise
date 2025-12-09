@@ -4,9 +4,8 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 export const CategoryChart = ({ transactions }) => {
-  // Агрегация данных для графика
   const dataMap = transactions
-    .filter(t => !t.is_income && t.category) // Берем только расходы с категорией
+    .filter(t => !t.is_income && t.category)
     .reduce((acc, t) => {
       const name = t.category.name;
       acc[name] = (acc[name] || 0) + t.amount;
@@ -18,13 +17,22 @@ export const CategoryChart = ({ transactions }) => {
     value: dataMap[name]
   }));
 
-  if (data.length === 0) return null;
+  // Если данных нет
+  if (data.length === 0) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-sm flex items-center justify-center text-gray-400" style={{ height: 300 }}>
+        Нет данных о расходах
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm h-80 flex flex-col">
+    <div className="bg-white p-6 rounded-lg shadow-sm flex flex-col">
       <h3 className="text-lg font-semibold mb-4 text-gray-800">Расходы по категориям</h3>
-      <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
+
+      {/* ЯВНАЯ ВЫСОТА ЧЕРЕЗ STYLE - САМЫЙ НАДЕЖНЫЙ СПОСОБ */}
+      <div style={{ width: '100%', height: 300 }}>
+        <ResponsiveContainer>
           <PieChart>
             <Pie
               data={data}
