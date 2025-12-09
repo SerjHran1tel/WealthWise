@@ -2,13 +2,13 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-from datetime import date, datetime, time  # <-- Добавили datetime и time
+from datetime import date, datetime, time
 import uuid
 
 from app.database import get_db
 from app.models import Transaction, Category
 from app.schemas import TransactionResponse, UploadResponse, TransactionUpdate
-from app.services.parser import parse_csv
+from app.services.parser import parse_csv, parse_pdf  # <-- Импортируем parse_pdf
 from app.agents.classifier import classifier
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
@@ -21,11 +21,27 @@ async def upload_transactions(
         file: UploadFile = File(...),
         db: Session = Depends(get_db)
 ):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="Only CSV supported in MVP")
+    # Проверка расширения
+    filename = file.filename.lower()
+    if not (filename.endswith('.csv') or filename.endswith('.pdf')):
+        raise HTTPException(status_code=400, detail="Only CSV and PDF supported")
 
     contents = await file.read()
-    raw_transactions = parse_csv(contents)
+
+    # Выбор парсера
+    if filename.endswith('.csv'):
+        raw_transactions = parse_csv(contents)
+    elif filename.endswith('.pdf'):
+        raw_transactions = parse_pdf(contents)  # <-- Вызов нового парсера
+    else:
+        raw_transactions = []
+
+    if not raw_transactions:
+        return {
+            "status": "warning",
+            "imported_count": 0,
+            "message": "Could not parse any transactions. Check file format."
+        }
 
     count = 0
     for item in raw_transactions:
@@ -48,6 +64,7 @@ async def upload_transactions(
     return {"status": "success", "imported_count": count, "message": "File processed successfully"}
 
 
+# ... (Остальные методы get, delete, update остаются без изменений)
 @router.get("/", response_model=List[TransactionResponse])
 def get_transactions(
         skip: int = 0,
@@ -57,11 +74,6 @@ def get_transactions(
         db: Session = Depends(get_db)
 ):
     query = db.query(Transaction).filter(Transaction.user_id == TEST_USER_ID)
-
-    # ЖЕЛЕЗОБЕТОННАЯ ЛОГИКА ДАТ:
-    # Преобразуем date -> datetime
-    # start_date -> 2025-12-01 00:00:00
-    # end_date -> 2025-12-31 23:59:59
 
     if start_date:
         start_dt = datetime.combine(start_date, time.min)

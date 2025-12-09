@@ -2,17 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base, SessionLocal
 from app.models import Category
-from app.routers import transactions, categories, budgets
+from app.routers import transactions, categories, budgets, insights, chat, goals # <-- Добавили goals
 
 # Создание таблиц
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="WealthWise API")
 
-# Настройка CORS - разрешаем ВСЁ
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Разрешить любой источник (для отладки)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,6 +44,9 @@ seed_db()
 app.include_router(transactions.router)
 app.include_router(categories.router)
 app.include_router(budgets.router)
+app.include_router(insights.router)
+app.include_router(chat.router)
+app.include_router(goals.router) # <-- Подключаем
 
 @app.get("/api/health")
 def health_check():

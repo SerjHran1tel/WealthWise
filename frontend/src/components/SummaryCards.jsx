@@ -1,67 +1,58 @@
 import React from 'react';
-import { ArrowUpCircle, ArrowDownCircle, Wallet } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export const SummaryCards = ({ transactions }) => {
-  // Считаем доходы
-  const income = transactions
-    .filter(t => t.is_income)
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  // Считаем расходы
-  const expense = transactions
-    .filter(t => !t.is_income)
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  // Считаем баланс
+  const income = transactions.filter(t => t.is_income).reduce((acc, t) => acc + t.amount, 0);
+  const expense = transactions.filter(t => !t.is_income).reduce((acc, t) => acc + t.amount, 0);
   const balance = income - expense;
 
-  // Форматтер валюты
   const format = (val) => new Intl.NumberFormat('ru-RU', {
     style: 'currency', currency: 'RUB', maximumFractionDigits: 0
   }).format(val);
 
+  const Card = ({ title, amount, icon: Icon, colorClass, bgClass, trend }) => (
+    <motion.div
+      whileHover={{ y: -5 }}
+      className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group"
+    >
+      <div className={`absolute top-0 right-0 w-32 h-32 ${bgClass} rounded-full -mr-16 -mt-16 opacity-10 group-hover:scale-150 transition-transform duration-500`} />
+
+      <div className="flex justify-between items-start relative z-10">
+        <div>
+          <p className="text-sm font-medium text-slate-500 mb-1">{title}</p>
+          <h3 className="text-3xl font-bold text-slate-800 tracking-tight">{amount}</h3>
+        </div>
+        <div className={`p-3 rounded-xl ${bgClass} ${colorClass}`}>
+          <Icon size={24} />
+        </div>
+      </div>
+    </motion.div>
+  );
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      {/* Карточка Расходов */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-danger">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Расходы</p>
-            <h3 className="text-2xl font-bold text-gray-800 mt-1">{format(expense)}</h3>
-          </div>
-          <div className="p-2 bg-red-50 rounded text-danger">
-            <ArrowDownCircle size={24} />
-          </div>
-        </div>
-      </div>
-
-      {/* Карточка Доходов */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-success">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Доходы</p>
-            <h3 className="text-2xl font-bold text-gray-800 mt-1">{format(income)}</h3>
-          </div>
-          <div className="p-2 bg-green-50 rounded text-success">
-            <ArrowUpCircle size={24} />
-          </div>
-        </div>
-      </div>
-
-      {/* Карточка Баланса */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-primary">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Баланс за период</p>
-            <h3 className={`text-2xl font-bold mt-1 ${balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-              {balance > 0 ? '+' : ''}{format(balance)}
-            </h3>
-          </div>
-          <div className="p-2 bg-blue-50 rounded text-primary">
-            <Wallet size={24} />
-          </div>
-        </div>
-      </div>
+      <Card
+        title="Расходы"
+        amount={format(expense)}
+        icon={ArrowDownRight}
+        colorClass="text-rose-600"
+        bgClass="bg-rose-100"
+      />
+      <Card
+        title="Доходы"
+        amount={format(income)}
+        icon={ArrowUpRight}
+        colorClass="text-emerald-600"
+        bgClass="bg-emerald-100"
+      />
+      <Card
+        title="Баланс"
+        amount={format(balance)}
+        icon={Wallet}
+        colorClass="text-blue-600"
+        bgClass="bg-blue-100"
+      />
     </div>
   );
 };

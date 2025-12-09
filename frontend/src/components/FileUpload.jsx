@@ -1,60 +1,68 @@
 import React, { useState } from 'react';
-import { Upload, Check, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, XCircle } from 'lucide-react';
 import { transactionService } from '../services/api';
+import { motion } from 'framer-motion';
 
 export const FileUpload = ({ onUploadSuccess }) => {
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState(null);
+  const [status, setStatus] = useState(null); // success | error
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setLoading(true);
-    setMessage(null);
+    setStatus(null);
 
     try {
       const result = await transactionService.upload(file);
-      setMessage({ type: 'success', text: `Импортировано: ${result.imported_count}` });
-      if (onUploadSuccess) onUploadSuccess();
-    } catch (error) {
-      console.error(error);
-      setMessage({ type: 'error', text: 'Ошибка загрузки. Проверьте формат CSV.' });
+      if (result.status === 'success') {
+        setStatus({ type: 'success', text: `+${result.imported_count} записей` });
+        onUploadSuccess();
+      } else {
+        setStatus({ type: 'error', text: 'Ошибка формата' });
+      }
+    } catch {
+      setStatus({ type: 'error', text: 'Сбой загрузки' });
     } finally {
       setLoading(false);
-      // Очистка инпута, чтобы можно было загрузить тот же файл снова
       e.target.value = null;
     }
   };
 
   return (
-    <div className="p-6 bg-white rounded-lg shadow-sm mb-6">
-      <h3 className="text-lg font-semibold mb-4 text-gray-800 flex items-center gap-2">
-        <Upload size={20} /> Загрузка выписки
-      </h3>
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+      <h3 className="text-lg font-bold text-slate-800 mb-4">Импорт данных</h3>
 
-      <div className="flex items-center gap-4">
-        <label className="cursor-pointer bg-primary text-white px-4 py-2 rounded hover:bg-blue-600 transition flex items-center gap-2">
-           {loading ? 'Загрузка...' : 'Выбрать файл (CSV)'}
-           <input
-             type="file"
-             accept=".csv"
-             onChange={handleFileChange}
-             disabled={loading}
-             className="hidden"
-           />
-        </label>
+      <label className={`
+        relative flex flex-col items-center justify-center w-full h-32
+        border-2 border-dashed rounded-xl cursor-pointer transition-all duration-300
+        ${loading ? 'bg-slate-50 border-slate-300' : 'border-blue-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-400'}
+      `}>
+        <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center">
+          {loading ? (
+             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+          ) : (
+             <UploadCloud className="w-8 h-8 text-blue-500 mb-2" />
+          )}
+          <p className="text-sm text-slate-600 font-medium">
+            {loading ? 'Обработка...' : 'Нажмите для выбора CSV/PDF'}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">Сбер, Тинькофф, Альфа</p>
+        </div>
+        <input type="file" className="hidden" accept=".csv,.pdf" onChange={handleFileChange} disabled={loading} />
+      </label>
 
-        {message && (
-          <div className={`flex items-center gap-2 text-sm ${message.type === 'success' ? 'text-success' : 'text-danger'}`}>
-            {message.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
-            {message.text}
-          </div>
-        )}
-      </div>
-      <p className="text-xs text-gray-500 mt-2">
-        Поддерживается формат: Дата; Описание; Сумма (разделитель ; или ,)
-      </p>
+      {status && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          className={`mt-3 flex items-center gap-2 text-sm p-3 rounded-lg font-medium
+            ${status.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}
+        >
+          {status.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+          {status.text}
+        </motion.div>
+      )}
     </div>
   );
 };
