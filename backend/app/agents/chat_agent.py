@@ -1,103 +1,288 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from app.models import Transaction, Category, Budget
-from datetime import datetime
+from sqlalchemy import func, desc
+from app.models import Transaction, Category, Budget, Goal, Insight
+from app.services.ollama_client import ollama_client, OllamaError
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import List, Dict, Optional
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ChatAgent:
-    def process_message(self, db: Session, user_id: str, message: str) -> str:
+    """
+    AI ассистент на базе Ollama с доступом к финансовой БД.
+    """
+
+    def __init__(self):
+        self.system_prompt = """Ты - финансовый помощник WealthWise. Твоя задача помогать пользователю управлять финансами.
+
+ВАЖНЫЕ ПРАВИЛА:
+1. Отвечай КРАТКО и ПО ДЕЛУ (максимум 3-4 предложения)
+2. Используй только ФАКТЫ из предоставленных данных
+3. Форматируй суммы с символом ₽ и разделителями тысяч
+4. Будь дружелюбным, но профессиональным
+5. Если данных нет - так и скажи, НЕ ПРИДУМЫВАЙ
+
+ЗАПРЕЩЕНО:
+- Длинные объяснения (более 4 предложений)
+- Вымышленные данные
+- Финансовые советы без контекста
+- Использование markdown форматирования (**, ##, -)
+
+Всегда отвечай на русском языке."""
+
+    async def process_message(self, db: Session, user_id: str, message: str) -> str:
         """
-        Обрабатывает сообщение пользователя и возвращает ответ.
+        Обрабатывает сообщение пользователя с помощью Ollama.
         """
-        msg = message.lower().strip()
+        try:
+            # Получаем контекст из БД
+            context = self._gather_context(db, user_id, message)
 
-        # 1. Запрос баланса
-        if any(word in msg for word in ["баланс", "сколько денег", "остаток", "ситуация"]):
-            return self._get_balance(db, user_id)
+            # Формируем промпт с контекстом
+            prompt = self._build_prompt(message, context)
 
-        # 2. Запрос расходов по категории
-        if "потратил" in msg or "расход" in msg:
-            # Пытаемся найти название категории в сообщении
-            categories = db.query(Category).all()
-            for cat in categories:
-                if cat.name.lower() in msg:
-                    return self._get_category_spending(db, user_id, cat)
-
-            # Если категория не найдена, но спрашивали про траты
-            return "Я не понял, о какой категории речь. Попробуйте: 'Сколько я потратил на Продукты?'"
-
-        # 3. Топ трат
-        if "больше всего" in msg or "самая большая" in msg or "топ" in msg:
-            return self._get_top_expense(db, user_id)
-
-        # 4. Последние операции
-        if "последние" in msg or "операции" in msg:
-            return self._get_recent_transactions(db, user_id)
-
-        # 5. Приветствие / Помощь
-        if any(word in msg for word in ["привет", "помоги", "умеешь", "start", "help"]):
-            return (
-                "Привет! Я твой финансовый помощник. Ты можешь спросить меня:\n"
-                "- Какой у меня баланс?\n"
-                "- Сколько я потратил на Продукты?\n"
-                "- Где я потратил больше всего?\n"
-                "- Покажи последние операции"
+            # Запрашиваем ответ у Ollama
+            response = await ollama_client.generate(
+                prompt=prompt,
+                system_prompt=self.system_prompt,
+                temperature=0.3,  # Низкая температура для фактических ответов
+                max_tokens=300  # Ограничиваем длину ответа
             )
 
-        return "Извините, я пока не понимаю этот вопрос. Попробуйте спросить про баланс или расходы по категории."
+            # Постобработка ответа
+            response = self._postprocess_response(response)
 
-    # --- Вспомогательные методы ---
+            return response
 
-    def _get_balance(self, db: Session, user_id: str) -> str:
+        except OllamaError as e:
+            logger.error(f"Ollama error: {e}")
+            return "Извините, AI ассистент временно недоступен. Попробуйте позже или проверьте, что Ollama запущен."
+        except Exception as e:
+            logger.error(f"Chat agent error: {e}", exc_info=True)
+            return "Произошла ошибка при обработке запроса. Попробуйте переформулировать вопрос."
+
+    def _gather_context(self, db: Session, user_id: str, message: str) -> Dict:
+        """
+        Собирает релевантный контекст из БД на основе сообщения пользователя.
+        """
+        msg_lower = message.lower()
+        context = {}
+
+        # Всегда добавляем базовую статистику
+        context['balance'] = self._get_balance_info(db, user_id)
+
+        # Если спрашивают про баланс или общую ситуацию
+        if any(word in msg_lower for word in ['баланс', 'сколько', 'деньги', 'ситуация', 'статус']):
+            context['recent_transactions'] = self._get_recent_transactions(db, user_id, limit=5)
+
+        # Если спрашивают про расходы/категории
+        if any(word in msg_lower for word in ['потратил', 'расход', 'трат', 'категор']):
+            context['expenses_by_category'] = self._get_expenses_by_category(db, user_id)
+            context['top_expenses'] = self._get_top_expenses(db, user_id, limit=3)
+
+        # Если спрашивают про бюджет
+        if any(word in msg_lower for word in ['бюджет', 'лимит', 'превышен']):
+            context['budgets'] = self._get_budget_status(db, user_id)
+
+        # Если спрашивают про цели
+        if any(word in msg_lower for word in ['цел', 'накопл', 'сберег']):
+            context['goals'] = self._get_goals_info(db, user_id)
+
+        # Если спрашивают про инсайты/рекомендации
+        if any(word in msg_lower for word in ['совет', 'рекоменд', 'инсайт', 'предупрежд']):
+            context['insights'] = self._get_recent_insights(db, user_id)
+
+        return context
+
+    def _build_prompt(self, message: str, context: Dict) -> str:
+        """
+        Формирует промпт для LLM с контекстом.
+        """
+        prompt_parts = [
+            f"ВОПРОС ПОЛЬЗОВАТЕЛЯ: {message}",
+            "",
+            "ДАННЫЕ ИЗ БАЗЫ:"
+        ]
+
+        # Добавляем релевантный контекст
+        if 'balance' in context:
+            bal = context['balance']
+            prompt_parts.append(
+                f"• Баланс: {bal['balance']:,.2f} ₽ (Доходы: {bal['income']:,.2f} ₽, Расходы: {bal['expenses']:,.2f} ₽)")
+
+        if 'expenses_by_category' in context:
+            prompt_parts.append("• Расходы по категориям:")
+            for cat in context['expenses_by_category'][:5]:  # Топ-5
+                prompt_parts.append(f"  - {cat['category']}: {cat['amount']:,.2f} ₽")
+
+        if 'budgets' in context:
+            prompt_parts.append("• Состояние бюджетов:")
+            for b in context['budgets']:
+                status = "❗ ПРЕВЫШЕН" if b['is_exceeded'] else "✓ в норме"
+                prompt_parts.append(f"  - {b['category']}: {b['spent']:,.0f} ₽ из {b['limit']:,.0f} ₽ ({status})")
+
+        if 'goals' in context:
+            prompt_parts.append("• Финансовые цели:")
+            for g in context['goals']:
+                prompt_parts.append(
+                    f"  - {g['name']}: {g['current']:,.0f} ₽ из {g['target']:,.0f} ₽ ({g['percentage']:.0f}%)")
+
+        if 'recent_transactions' in context:
+            prompt_parts.append("• Последние транзакции:")
+            for t in context['recent_transactions']:
+                sign = "+" if t['is_income'] else "-"
+                prompt_parts.append(f"  - {t['date']}: {t['description']} ({sign}{t['amount']:,.0f} ₽)")
+
+        if 'top_expenses' in context:
+            prompt_parts.append("• Крупнейшие траты:")
+            for t in context['top_expenses']:
+                prompt_parts.append(f"  - {t['description']}: {t['amount']:,.0f} ₽")
+
+        if 'insights' in context:
+            prompt_parts.append("• Недавние инсайты:")
+            for ins in context['insights']:
+                prompt_parts.append(f"  - [{ins['type']}] {ins['title']}: {ins['description']}")
+
+        prompt_parts.append("")
+        prompt_parts.append(
+            "Ответь на вопрос пользователя, используя ТОЛЬКО эти данные. Будь краток (максимум 3-4 предложения).")
+
+        return "\n".join(prompt_parts)
+
+    def _postprocess_response(self, response: str) -> str:
+        """
+        Постобработка ответа от LLM.
+        """
+        # Удаляем лишние пробелы
+        response = response.strip()
+
+        # Ограничиваем длину (на случай если модель игнорировала инструкции)
+        sentences = response.split('.')
+        if len(sentences) > 4:
+            response = '.'.join(sentences[:4]) + '.'
+
+        return response
+
+    # === Вспомогательные методы для сбора данных ===
+
+    def _get_balance_info(self, db: Session, user_id: str) -> Dict:
+        """Получает информацию о балансе"""
         income = db.query(func.sum(Transaction.amount)).filter(
-            Transaction.user_id == user_id, Transaction.is_income == True
-        ).scalar() or 0
-
-        expense = db.query(func.sum(Transaction.amount)).filter(
-            Transaction.user_id == user_id, Transaction.is_income == False
-        ).scalar() or 0
-
-        balance = income - expense
-        return f"Ваш текущий баланс: {balance:,.2f} ₽ (Доходы: {income:,.0f}, Расходы: {expense:,.0f})"
-
-    def _get_category_spending(self, db: Session, user_id: str, category: Category) -> str:
-        # Берем траты за текущий месяц (упрощенно)
-        current_month = datetime.now().replace(day=1)
-
-        spent = db.query(func.sum(Transaction.amount)).filter(
             Transaction.user_id == user_id,
-            Transaction.category_id == category.id,
-            Transaction.is_income == False,
-            Transaction.date >= current_month
-        ).scalar() or 0
+            Transaction.is_income == True
+        ).scalar() or Decimal('0')
 
-        return f"В этом месяце на категорию '{category.name}' вы потратили {spent:,.2f} ₽."
-
-    def _get_top_expense(self, db: Session, user_id: str) -> str:
-        top_txn = db.query(Transaction).filter(
+        expenses = db.query(func.sum(Transaction.amount)).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == False
-        ).order_by(Transaction.amount.desc()).first()
+        ).scalar() or Decimal('0')
 
-        if not top_txn:
-            return "У вас пока нет расходов."
+        # ИСПРАВЛЕНИЕ: явное приведение к Decimal
+        income = Decimal(str(income)) if income else Decimal('0')
+        expenses = Decimal(str(expenses)) if expenses else Decimal('0')
 
-        return f"Ваша самая крупная трата: {top_txn.amount:,.2f} ₽ на '{top_txn.description}' ({top_txn.date.date()})."
+        return {
+            'income': float(income),
+            'expenses': float(expenses),
+            'balance': float(income - expenses)
+        }
 
-    def _get_recent_transactions(self, db: Session, user_id: str) -> str:
+    def _get_recent_transactions(self, db: Session, user_id: str, limit: int = 5) -> List[Dict]:
+        """Получает последние транзакции"""
         txns = db.query(Transaction).filter(
             Transaction.user_id == user_id
-        ).order_by(Transaction.date.desc()).limit(3).all()
+        ).order_by(desc(Transaction.date)).limit(limit).all()
 
-        if not txns:
-            return "Операций не найдено."
+        return [{
+            'date': t.date.strftime('%d.%m'),
+            'description': t.description[:30],
+            'amount': float(t.amount),
+            'is_income': t.is_income
+        } for t in txns]
 
-        lines = ["Последние операции:"]
-        for t in txns:
-            sign = "+" if t.is_income else "-"
-            lines.append(f"{t.date.date()}: {t.description} ({sign}{t.amount:.0f} ₽)")
+    def _get_expenses_by_category(self, db: Session, user_id: str) -> List[Dict]:
+        """Получает расходы по категориям за текущий месяц"""
+        current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0)
 
-        return "\n".join(lines)
+        results = db.query(
+            Category.name,
+            func.sum(Transaction.amount).label('total')
+        ).join(Transaction).filter(
+            Transaction.user_id == user_id,
+            Transaction.is_income == False,
+            Transaction.date >= current_month
+        ).group_by(Category.name).order_by(desc('total')).all()
+
+        return [{
+            'category': r.name,
+            'amount': float(r.total) if r.total else 0.0
+        } for r in results]
+
+    def _get_top_expenses(self, db: Session, user_id: str, limit: int = 3) -> List[Dict]:
+        """Получает крупнейшие траты"""
+        txns = db.query(Transaction).filter(
+            Transaction.user_id == user_id,
+            Transaction.is_income == False
+        ).order_by(desc(Transaction.amount)).limit(limit).all()
+
+        return [{
+            'description': t.description[:50],
+            'amount': float(t.amount),
+            'date': t.date.strftime('%d.%m.%Y')
+        } for t in txns]
+
+    def _get_budget_status(self, db: Session, user_id: str) -> List[Dict]:
+        """Получает статус бюджетов"""
+        current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0)
+        budgets = db.query(Budget).filter(Budget.user_id == user_id).all()
+
+        result = []
+        for b in budgets:
+            spent = db.query(func.sum(Transaction.amount)).filter(
+                Transaction.user_id == user_id,
+                Transaction.category_id == b.category_id,
+                Transaction.is_income == False,
+                Transaction.date >= current_month
+            ).scalar() or Decimal('0')
+
+            spent = Decimal(str(spent)) if spent else Decimal('0')
+
+            result.append({
+                'category': b.category.name if b.category else 'Unknown',
+                'limit': float(b.amount),
+                'spent': float(spent),
+                'is_exceeded': spent > Decimal(str(b.amount))
+            })
+
+        return result
+
+    def _get_goals_info(self, db: Session, user_id: str) -> List[Dict]:
+        """Получает информацию о финансовых целях"""
+        goals = db.query(Goal).filter(Goal.user_id == user_id).all()
+
+        return [{
+            'name': g.name,
+            'target': float(g.target_amount),
+            'current': float(g.current_amount),
+            'percentage': (float(g.current_amount) / float(g.target_amount) * 100) if g.target_amount > 0 else 0
+        } for g in goals]
+
+    def _get_recent_insights(self, db: Session, user_id: str) -> List[Dict]:
+        """Получает недавние инсайты"""
+        insights = db.query(Insight).filter(
+            Insight.user_id == user_id
+        ).order_by(desc(Insight.created_at)).limit(5).all()
+
+        return [{
+            'type': i.type,
+            'title': i.title,
+            'description': i.description[:100]
+        } for i in insights]
 
 
+# Глобальный экземпляр агента
 chat_agent = ChatAgent()

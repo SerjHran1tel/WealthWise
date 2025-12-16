@@ -4,7 +4,15 @@ import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
 export const TrendChart = ({ transactions }) => {
-  const groupedData = transactions
+  // Безопасное извлечение массива транзакций
+  const transactionsList = React.useMemo(() => {
+    if (!transactions) return [];
+    if (Array.isArray(transactions)) return transactions;
+    if (transactions.items && Array.isArray(transactions.items)) return transactions.items;
+    return [];
+  }, [transactions]);
+
+  const groupedData = transactionsList
     .filter(t => !t.is_income)
     .reduce((acc, t) => {
       // Безопасное извлечение даты

@@ -4,7 +4,18 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 export const CategoryChart = ({ transactions }) => {
-  const dataMap = transactions
+  // Безопасное извлечение массива транзакций
+  const transactionsList = React.useMemo(() => {
+    if (!transactions) return [];
+    if (Array.isArray(transactions)) return transactions;
+    if (transactions.items && Array.isArray(transactions.items)) return transactions.items;
+    return [];
+  }, [transactions]);
+
+  console.log('CategoryChart transactions:', transactions);
+  console.log('CategoryChart transactionsList:', transactionsList);
+
+  const dataMap = transactionsList
     .filter(t => !t.is_income && t.category)
     .reduce((acc, t) => {
       const name = t.category.name;
