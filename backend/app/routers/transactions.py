@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models import Transaction, Category
 from app.schemas import (
     TransactionResponse, UploadResponse, TransactionUpdate,
-    PaginationParams, PaginatedResponse
+    PaginationParams
 )
 from app.services.parser import parse_csv, parse_pdf
 from app.agents.classifier import classifier
@@ -32,7 +32,6 @@ async def upload_transactions(
     Загрузка транзакций из CSV или PDF файла.
     Поддерживаемые форматы: .csv, .pdf
     """
-    # Проверка расширения файла
     filename = file.filename.lower() if file.filename else ""
 
     if not (filename.endswith('.csv') or filename.endswith('.pdf')):
@@ -41,7 +40,6 @@ async def upload_transactions(
             detail="Unsupported file format. Only CSV and PDF files are accepted."
         )
 
-    # Проверка размера файла
     contents = await file.read()
     file_size_mb = len(contents) / (1024 * 1024)
 
@@ -53,7 +51,6 @@ async def upload_transactions(
 
     logger.info(f"Processing file: {filename}, size: {file_size_mb:.2f}MB")
 
-    # Выбор парсера
     raw_transactions = []
     errors = []
 
@@ -74,19 +71,16 @@ async def upload_transactions(
             status="error" if not errors else "warning",
             imported_count=0,
             message="Could not parse any transactions from the file.",
-            errors=errors[:10]  # Ограничиваем количество ошибок в ответе
+            errors=errors[:10]
         )
 
-    # Импорт транзакций в БД
     imported_count = 0
     import_errors = []
 
     for item in raw_transactions:
         try:
-            # Автоматическая категоризация
             cat_id = classifier.categorize(db, item['description'], item['amount'])
 
-            # Создаем транзакцию
             db_txn = Transaction(
                 user_id=user_id,
                 date=item['date'],
@@ -145,13 +139,9 @@ async def get_transactions(
         user_id: str = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
-    """
-    Получить список транзакций с пагинацией и фильтрами.
-    """
-    # Базовый запрос
+    """Получить список транзакций с пагинацией и фильтрами."""
     query = db.query(Transaction).filter(Transaction.user_id == user_id)
 
-    # Применяем фильтры
     if start_date:
         start_dt = datetime.combine(start_date, time.min)
         query = query.filter(Transaction.date >= start_dt)
@@ -169,17 +159,14 @@ async def get_transactions(
     if search:
         query = query.filter(Transaction.description.ilike(f"%{search}%"))
 
-    # Считаем общее количество
     total = query.count()
 
-    # Применяем пагинацию
     pagination = PaginationParams(page=page, page_size=page_size)
     transactions = query.order_by(Transaction.date.desc()) \
         .offset(pagination.skip) \
         .limit(pagination.limit) \
         .all()
 
-    # Формируем ответ
     return {
         "items": [TransactionResponse.model_validate(t) for t in transactions],
         "total": total,
@@ -250,7 +237,6 @@ async def update_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     try:
-        # Обновляем только переданные поля
         update_dict = update_data.model_dump(exclude_unset=True)
 
         for field, value in update_dict.items():
@@ -277,9 +263,7 @@ async def get_transactions_summary(
         user_id: str = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
-    """
-    Получить сводную статистику по транзакциям.
-    """
+    """Получить сводную статистику по транзакциям."""
     query = db.query(Transaction).filter(Transaction.user_id == user_id)
 
     if start_date:
@@ -290,20 +274,15 @@ async def get_transactions_summary(
         end_dt = datetime.combine(end_date, time.max)
         query = query.filter(Transaction.date <= end_dt)
 
-    # Доходы
     income = query.filter(Transaction.is_income == True) \
                  .with_entities(func.sum(Transaction.amount)) \
                  .scalar() or Decimal('0.00')
 
-    # Расходы
     expenses = query.filter(Transaction.is_income == False) \
                    .with_entities(func.sum(Transaction.amount)) \
                    .scalar() or Decimal('0.00')
 
-    # Баланс
     balance = income - expenses
-
-    # Количество транзакций
     total_count = query.count()
 
     return {

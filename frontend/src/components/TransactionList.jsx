@@ -3,7 +3,6 @@ import { Trash2, ShoppingBag, Coffee, Car, Home } from 'lucide-react';
 import { transactionService } from '../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Хелпер для иконок (можно расширить)
 const getCategoryIcon = (name) => {
   const n = name.toLowerCase();
   if (n.includes('продукт')) return <ShoppingBag size={14} />;
@@ -13,16 +12,8 @@ const getCategoryIcon = (name) => {
   return <div className="w-2 h-2 rounded-full bg-current" />;
 };
 
-export const TransactionList = ({ transactions, categories, onTransactionUpdate }) => {
+export const TransactionList = ({ transactions = [], categories = [], onTransactionUpdate }) => {
   const [editingId, setEditingId] = useState(null);
-
-  // Безопасное извлечение массива транзакций
-  const transactionsList = React.useMemo(() => {
-    if (!transactions) return [];
-    if (Array.isArray(transactions)) return transactions;
-    if (transactions.items && Array.isArray(transactions.items)) return transactions.items;
-    return [];
-  }, [transactions]);
 
   const formatCurrency = (amount) => new Intl.NumberFormat('ru-RU', {
     style: 'currency', currency: 'RUB', maximumFractionDigits: 2
@@ -41,7 +32,7 @@ export const TransactionList = ({ transactions, categories, onTransactionUpdate 
     setEditingId(null);
   };
 
-  if (!transactionsList.length) return null;
+  if (!transactions.length) return null;
 
   return (
     <div className="overflow-x-auto">
@@ -57,7 +48,7 @@ export const TransactionList = ({ transactions, categories, onTransactionUpdate 
         </thead>
         <tbody className="divide-y divide-slate-100">
           <AnimatePresence>
-            {transactionsList.map((t) => (
+            {transactions.map((t) => (
               <motion.tr
                 key={t.id}
                 initial={{ opacity: 0 }}

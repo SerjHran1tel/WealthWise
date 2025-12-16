@@ -2,17 +2,9 @@ import React from 'react';
 import { ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export const SummaryCards = ({ transactions }) => {
-  // Проверяем, что transactions - это массив или извлекаем items из объекта с пагинацией
-  const transactionsList = React.useMemo(() => {
-    if (!transactions) return [];
-    if (Array.isArray(transactions)) return transactions;
-    if (transactions.items && Array.isArray(transactions.items)) return transactions.items;
-    return [];
-  }, [transactions]);
-
-  const income = transactionsList.filter(t => t.is_income).reduce((acc, t) => acc + t.amount, 0);
-  const expense = transactionsList.filter(t => !t.is_income).reduce((acc, t) => acc + t.amount, 0);
+export const SummaryCards = ({ transactions = [] }) => {
+  const income = transactions.filter(t => t.is_income).reduce((acc, t) => acc + t.amount, 0);
+  const expense = transactions.filter(t => !t.is_income).reduce((acc, t) => acc + t.amount, 0);
   const balance = income - expense;
 
   const format = (val) => new Intl.NumberFormat('ru-RU', {

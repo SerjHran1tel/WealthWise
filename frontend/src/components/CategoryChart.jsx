@@ -3,19 +3,8 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
-export const CategoryChart = ({ transactions }) => {
-  // Безопасное извлечение массива транзакций
-  const transactionsList = React.useMemo(() => {
-    if (!transactions) return [];
-    if (Array.isArray(transactions)) return transactions;
-    if (transactions.items && Array.isArray(transactions.items)) return transactions.items;
-    return [];
-  }, [transactions]);
-
-  console.log('CategoryChart transactions:', transactions);
-  console.log('CategoryChart transactionsList:', transactionsList);
-
-  const dataMap = transactionsList
+export const CategoryChart = ({ transactions = [] }) => {
+  const dataMap = transactions
     .filter(t => !t.is_income && t.category)
     .reduce((acc, t) => {
       const name = t.category.name;
@@ -28,10 +17,9 @@ export const CategoryChart = ({ transactions }) => {
     value: dataMap[name]
   }));
 
-  // Если данных нет
   if (data.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-sm flex items-center justify-center text-gray-400" style={{ height: 300 }}>
+      <div className="bg-white p-6 rounded-lg shadow-sm flex items-center justify-center text-gray-400 h-[300px]">
         Нет данных о расходах
       </div>
     );
@@ -41,9 +29,8 @@ export const CategoryChart = ({ transactions }) => {
     <div className="bg-white p-6 rounded-lg shadow-sm flex flex-col">
       <h3 className="text-lg font-semibold mb-4 text-gray-800">Расходы по категориям</h3>
 
-      {/* ЯВНАЯ ВЫСОТА ЧЕРЕЗ STYLE - САМЫЙ НАДЕЖНЫЙ СПОСОБ */}
-      <div style={{ width: '100%', height: 300 }}>
-        <ResponsiveContainer>
+      <div className="w-full h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data}
