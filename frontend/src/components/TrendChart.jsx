@@ -3,16 +3,15 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
-export const TrendChart = ({ transactions }) => {
+export const TrendChart = ({ transactions = [] }) => {
   const groupedData = transactions
     .filter(t => !t.is_income)
     .reduce((acc, t) => {
-      // Безопасное извлечение даты
       try {
         const dateKey = t.date.split('T')[0];
         acc[dateKey] = (acc[dateKey] || 0) + t.amount;
       } catch (e) {
-        // Игнорируем ошибки парсинга
+        // Ignore parsing errors
       }
       return acc;
     }, {});
@@ -27,7 +26,7 @@ export const TrendChart = ({ transactions }) => {
 
   if (data.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-sm mt-6 flex items-center justify-center text-gray-400" style={{ height: 300 }}>
+      <div className="bg-white p-6 rounded-lg shadow-sm mt-6 flex items-center justify-center text-gray-400 h-[300px]">
         Нет данных для графика
       </div>
     );
@@ -37,9 +36,8 @@ export const TrendChart = ({ transactions }) => {
     <div className="bg-white p-6 rounded-lg shadow-sm mt-6 flex flex-col">
       <h3 className="text-lg font-semibold mb-4 text-gray-800">Динамика расходов</h3>
 
-      {/* ЯВНАЯ ВЫСОТА */}
-      <div style={{ width: '100%', height: 300 }}>
-        <ResponsiveContainer>
+      <div className="w-full h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="displayDate" fontSize={12} tickLine={false} />

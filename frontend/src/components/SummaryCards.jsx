@@ -2,16 +2,18 @@ import React from 'react';
 import { ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export const SummaryCards = ({ transactions }) => {
+export const SummaryCards = ({ transactions = [] }) => {
   const income = transactions.filter(t => t.is_income).reduce((acc, t) => acc + t.amount, 0);
   const expense = transactions.filter(t => !t.is_income).reduce((acc, t) => acc + t.amount, 0);
   const balance = income - expense;
 
   const format = (val) => new Intl.NumberFormat('ru-RU', {
-    style: 'currency', currency: 'RUB', maximumFractionDigits: 0
+    style: 'currency',
+    currency: 'RUB',
+    maximumFractionDigits: 0
   }).format(val);
 
-  const Card = ({ title, amount, icon: Icon, colorClass, bgClass, trend }) => (
+  const Card = ({ title, amount, icon: Icon, colorClass, bgClass }) => (
     <motion.div
       whileHover={{ y: -5 }}
       className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group"

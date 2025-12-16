@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Trash2, ShoppingBag, Coffee, Car, Home, Smartphone } from 'lucide-react';
+import { Trash2, ShoppingBag, Coffee, Car, Home } from 'lucide-react';
 import { transactionService } from '../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Хелпер для иконок (можно расширить)
 const getCategoryIcon = (name) => {
   const n = name.toLowerCase();
   if (n.includes('продукт')) return <ShoppingBag size={14} />;
@@ -13,7 +12,7 @@ const getCategoryIcon = (name) => {
   return <div className="w-2 h-2 rounded-full bg-current" />;
 };
 
-export const TransactionList = ({ transactions, categories, onTransactionUpdate }) => {
+export const TransactionList = ({ transactions = [], categories = [], onTransactionUpdate }) => {
   const [editingId, setEditingId] = useState(null);
 
   const formatCurrency = (amount) => new Intl.NumberFormat('ru-RU', {

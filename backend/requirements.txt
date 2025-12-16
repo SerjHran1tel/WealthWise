@@ -1,8 +1,32 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlalchemy==2.0.23
-pydantic==2.5.0
-pydantic-settings==2.1.0
-python-multipart==0.0.6
-python-dateutil==2.8.2
-pypdf
+# FastAPI и сервер
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17
+
+# База данных
+sqlalchemy==2.0.36
+alembic==1.14.0
+
+# Валидация
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# HTTP клиент для Ollama
+httpx==0.28.1
+
+# Парсинг файлов (обновлена версия pypdf)
+pypdf==5.1.0
+
+# Timezone support
+tzdata==2024.2
+
+# Логирование
+python-json-logger==3.2.1
+
+# CORS и безопасность
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Опционально для продакшена
+# gunicorn==23.0.0
+# sentry-sdk[fastapi]==2.18.0

@@ -2,146 +2,325 @@ import csv
 import io
 import re
 from datetime import datetime
-from typing import List, Dict
-from pydantic import ValidationError
-from pypdf import PdfReader  # <-- Новая библиотека
+from typing import List, Dict, Optional, Tuple
+from decimal import Decimal, InvalidOperation
+from pypdf import PdfReader
+from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class ParserError(Exception):
+    """Базовая ошибка парсера"""
+    pass
+
+
+class DateParseError(ParserError):
+    """Ошибка парсинга даты"""
+    pass
+
+
+class AmountParseError(ParserError):
+    """Ошибка парсинга суммы"""
+    pass
 
 
 def parse_date(date_str: str) -> datetime:
-    """Пытается распарсить дату из разных форматов"""
+    """
+    Пытается распарсить дату из разных форматов.
+    Возвращает datetime в UTC для единообразия.
+    """
     date_str = date_str.strip()
+
+    # Форматы дат в порядке приоритета
     formats = [
         "%d.%m.%Y",  # 10.12.2025
+        "%d.%m.%y",  # 10.12.25
         "%Y-%m-%d",  # 2025-12-10
         "%d/%m/%Y",  # 10/12/2025
         "%d-%m-%Y",  # 10-12-2025
-        "%Y.%m.%d"  # 2025.12.10
+        "%Y.%m.%d",  # 2025.12.10
+        "%d.%m.%Y %H:%M",  # 10.12.2025 14:30
+        "%Y-%m-%d %H:%M:%S",  # 2025-12-10 14:30:00
     ]
+
     for fmt in formats:
         try:
-            return datetime.strptime(date_str, fmt)
+            dt = datetime.strptime(date_str, fmt)
+            # Если нет времени, устанавливаем начало дня
+            if dt.hour == 0 and dt.minute == 0 and dt.second == 0 and ":" not in date_str:
+                dt = dt.replace(hour=0, minute=0, second=0)
+            return dt
         except ValueError:
             continue
-    raise ValueError(f"Cannot parse date: {date_str}")
+
+    raise DateParseError(f"Cannot parse date: {date_str}")
 
 
-def parse_csv(file_content: bytes) -> List[Dict]:
-    """Парсинг CSV файлов (как было раньше)"""
-    content_str = file_content.decode("utf-8")
-    file_obj = io.StringIO(content_str)
+def parse_amount(amount_str: str) -> Decimal:
+    """
+    Парсит сумму денег из строки, обрабатывая различные форматы.
+    Возвращает Decimal для точности.
+    """
+    if not amount_str or not isinstance(amount_str, str):
+        raise AmountParseError(f"Invalid amount string: {amount_str}")
 
-    dialect = csv.Sniffer().sniff(content_str[:1024], delimiters=";,")
-    file_obj.seek(0)
-    reader = csv.reader(file_obj, delimiter=dialect.delimiter)
+    # Убираем все кроме цифр, точки, запятой и минуса
+    amount_clean = re.sub(r'[^\d.,\-+]', '', amount_str.strip())
 
-    transactions = []
+    # Заменяем запятую на точку (европейский формат)
+    amount_clean = amount_clean.replace(',', '.')
 
-    # Пропуск заголовка (простая эвристика)
-    first_row = next(reader, None)
-    if not first_row: return []
+    # Убираем лишние точки (оставляем только последнюю для десятичной части)
+    parts = amount_clean.split('.')
+    if len(parts) > 2:
+        # Если несколько точек, последняя - десятичный разделитель
+        amount_clean = ''.join(parts[:-1]) + '.' + parts[-1]
+
     try:
-        parse_date(first_row[0])
-        file_obj.seek(0)
-        reader = csv.reader(file_obj, delimiter=dialect.delimiter)
-    except ValueError:
-        pass  # Это заголовок
+        amount = Decimal(amount_clean)
 
-    for row in reader:
-        if not row or len(row) < 3: continue
-        try:
-            date_raw = row[0]
-            desc_raw = row[1]
-            amount_raw = row[2]
+        # Валидация диапазона
+        if abs(amount) < Decimal(str(settings.MIN_AMOUNT)):
+            raise AmountParseError(f"Amount too small: {amount}")
+        if abs(amount) > Decimal(str(settings.MAX_AMOUNT)):
+            raise AmountParseError(f"Amount too large: {amount}")
 
-            amount_clean = amount_raw.replace(" ", "").replace(",", ".").replace("₽", "")
-            amount = float(amount_clean)
-            dt = parse_date(date_raw)
-
-            is_income = False
-            if amount > 0:
-                if "зарплата" in desc_raw.lower() or "income" in desc_raw.lower():
-                    is_income = True
-
-            transactions.append({
-                "date": dt,
-                "description": desc_raw,
-                "amount": abs(amount),
-                "is_income": is_income,
-                "currency": "RUB"
-            })
-        except Exception as e:
-            print(f"CSV Parse Error: {e}")
-            continue
-
-    return transactions
+        return amount
+    except (InvalidOperation, ValueError) as e:
+        raise AmountParseError(f"Cannot parse amount '{amount_str}': {e}")
 
 
-def parse_pdf(file_content: bytes) -> List[Dict]:
+def detect_is_income(description: str, amount: Decimal) -> bool:
     """
-    Парсинг PDF файлов.
-    Извлекает текст и ищет строки, похожие на транзакции.
+    Определяет, является ли транзакция доходом на основе описания и суммы.
+    """
+    desc_lower = description.lower()
+
+    # Ключевые слова для доходов
+    income_keywords = [
+        'зарплата', 'salary', 'зачисление', 'пополнение', 'возврат',
+        'income', 'deposit', 'refund', 'cashback', 'аванс', 'премия',
+        'bonus', 'дивиденды', 'проценты', 'interest'
+    ]
+
+    for keyword in income_keywords:
+        if keyword in desc_lower:
+            return True
+
+    # Если сумма положительная и нет явных признаков расхода
+    if amount > 0:
+        expense_keywords = ['оплата', 'покупка', 'списание', 'payment', 'purchase']
+        has_expense_keyword = any(kw in desc_lower for kw in expense_keywords)
+        if not has_expense_keyword:
+            return True
+
+    return False
+
+
+def parse_csv(file_content: bytes) -> Tuple[List[Dict], List[str]]:
+    """
+    Парсинг CSV файлов.
+    Возвращает (список транзакций, список ошибок)
     """
     transactions = []
+    errors = []
+
+    try:
+        # Определяем кодировку (пробуем UTF-8, затем Windows-1251)
+        try:
+            content_str = file_content.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                content_str = file_content.decode('windows-1251')
+            except UnicodeDecodeError:
+                content_str = file_content.decode('utf-8', errors='ignore')
+                errors.append("Warning: File encoding issues detected, some characters may be corrupted")
+
+        file_obj = io.StringIO(content_str)
+
+        # Определяем разделитель
+        try:
+            dialect = csv.Sniffer().sniff(content_str[:2048], delimiters=";,\t")
+            delimiter = dialect.delimiter
+        except csv.Error:
+            delimiter = ';'  # По умолчанию для русских банков
+            errors.append(f"Could not detect delimiter, using '{delimiter}'")
+
+        file_obj.seek(0)
+        reader = csv.reader(file_obj, delimiter=delimiter)
+
+        # Пропуск заголовка
+        first_row = next(reader, None)
+        if not first_row:
+            errors.append("Empty file")
+            return [], errors
+
+        # Проверяем, является ли первая строка заголовком
+        try:
+            parse_date(first_row[0])
+            # Если парсится как дата, это не заголовок
+            file_obj.seek(0)
+            reader = csv.reader(file_obj, delimiter=delimiter)
+        except (DateParseError, IndexError):
+            # Это заголовок, пропускаем
+            pass
+
+        row_num = 1
+        for row in reader:
+            row_num += 1
+
+            if not row or len(row) < 3:
+                errors.append(f"Row {row_num}: Too few columns, skipped")
+                continue
+
+            try:
+                date_raw = row[0].strip()
+                desc_raw = row[1].strip()
+                amount_raw = row[2].strip()
+
+                if not date_raw or not desc_raw or not amount_raw:
+                    errors.append(f"Row {row_num}: Empty required field, skipped")
+                    continue
+
+                dt = parse_date(date_raw)
+                amount = parse_amount(amount_raw)
+                is_income = detect_is_income(desc_raw, amount)
+
+                transactions.append({
+                    "date": dt,
+                    "description": desc_raw[:500],  # Ограничиваем длину
+                    "amount": abs(amount),
+                    "is_income": is_income,
+                    "currency": settings.DEFAULT_CURRENCY
+                })
+
+            except (DateParseError, AmountParseError) as e:
+                errors.append(f"Row {row_num}: {str(e)}")
+                continue
+            except Exception as e:
+                errors.append(f"Row {row_num}: Unexpected error - {str(e)}")
+                logger.error(f"CSV parse error at row {row_num}: {e}", exc_info=True)
+                continue
+
+            # Защита от слишком больших файлов
+            if len(transactions) >= settings.MAX_TRANSACTIONS_PER_FILE:
+                errors.append(f"Reached max transactions limit ({settings.MAX_TRANSACTIONS_PER_FILE})")
+                break
+
+        logger.info(f"CSV parsing finished. Found {len(transactions)} transactions, {len(errors)} errors")
+        return transactions, errors
+
+    except Exception as e:
+        logger.error(f"Critical CSV parsing error: {e}", exc_info=True)
+        errors.append(f"Critical error: {str(e)}")
+        return transactions, errors
+
+
+def parse_pdf(file_content: bytes) -> Tuple[List[Dict], List[str]]:
+    """
+    Парсинг PDF файлов банковских выписок.
+    Возвращает (список транзакций, список ошибок)
+    """
+    transactions = []
+    errors = []
 
     try:
         reader = PdfReader(io.BytesIO(file_content))
-        full_text = ""
-        for page in reader.pages:
-            full_text += page.extract_text() + "\n"
 
-        # Разделяем на строки
+        if len(reader.pages) == 0:
+            errors.append("PDF has no pages")
+            return [], errors
+
+        full_text = ""
+        for page_num, page in enumerate(reader.pages, 1):
+            try:
+                full_text += page.extract_text() + "\n"
+            except Exception as e:
+                errors.append(f"Page {page_num}: Could not extract text - {str(e)}")
+                continue
+
+        if not full_text.strip():
+            errors.append("No text could be extracted from PDF")
+            return [], errors
+
         lines = full_text.split('\n')
 
-        # Регулярное выражение для поиска транзакций
-        # Ищет: Дата (DD.MM.YYYY) + Пробелы + Описание + Пробелы + Сумма (число с точкой или запятой)
-        # Пример: 10.12.2025   Пятерочка   1200.50
-        # Группы: 1=Дата, 2=Описание, 3=Сумма
-        pattern = re.compile(r'(\d{2}\.\d{2}\.\d{4})\s+(.+?)\s+([-+]?\d+[\.,]\d{2})')
+        # Несколько паттернов для разных форматов банков
+        patterns = [
+            # Паттерн 1: Дата Описание Сумма
+            re.compile(r'(\d{2}\.\d{2}\.\d{4})\s+(.+?)\s+([-+]?\d+[\s,.]?\d*[.,]\d{2})'),
+            # Паттерн 2: Дата Описание ... Сумма (с возможными промежуточными данными)
+            re.compile(r'(\d{2}\.\d{2}\.\d{4})\s+(.+?)\s+(?:.*?)\s+([-+]?\d+[\s,.]?\d*[.,]\d{2})\s*$'),
+            # Паттерн 3: Дата и время
+            re.compile(r'(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})\s+(.+?)\s+([-+]?\d+[\s,.]?\d*[.,]\d{2})'),
+        ]
 
+        line_num = 0
         for line in lines:
+            line_num += 1
             line = line.strip()
-            match = pattern.search(line)
 
-            if match:
-                try:
-                    date_str = match.group(1)
-                    desc_str = match.group(2).strip()
-                    amount_str = match.group(3).replace(',', '.')  # Меняем запятую на точку
+            if not line or len(line) < 10:
+                continue
 
-                    # Пропускаем строки, если описание похоже на дату (бывает в таблицах)
-                    if re.match(r'\d{2}\.\d{2}\.\d{4}', desc_str):
-                        continue
+            matched = False
+            for pattern in patterns:
+                match = pattern.search(line)
 
-                    amount = float(amount_str)
-                    dt = parse_date(date_str)
+                if match:
+                    try:
+                        date_str = match.group(1)
+                        desc_str = match.group(2).strip()
+                        amount_str = match.group(3)
 
-                    # Эвристика: если в PDF сумма с минусом - это расход
-                    # Если без минуса - часто в PDF банках расходы пишут просто числом
-                    # Тут нужна логика конкретного банка.
-                    # Для MVP: считаем всё расходом, если нет слова "пополнение/зарплата"
-                    is_income = False
-                    if amount > 0 and ("зачисление" in desc_str.lower() or "зарплата" in desc_str.lower()):
-                        is_income = True
+                        # Пропускаем строки с подозрительным содержимым
+                        if re.match(r'\d{2}\.\d{2}\.\d{4}', desc_str):
+                            # Описание похоже на дату - это таблица
+                            continue
 
-                    # Если в PDF сумма указана как "-1200", то это точно расход
-                    if amount < 0:
-                        is_income = False
-                        amount = abs(amount)
+                        if len(desc_str) < 3:
+                            # Слишком короткое описание
+                            continue
 
-                    transactions.append({
-                        "date": dt,
-                        "description": desc_str,
-                        "amount": amount,
-                        "is_income": is_income,
-                        "currency": "RUB"
-                    })
-                except Exception as e:
-                    print(f"PDF Line Error: {line} -> {e}")
-                    continue
+                        dt = parse_date(date_str)
+                        amount = parse_amount(amount_str)
+                        is_income = detect_is_income(desc_str, amount)
 
-        print(f"PDF Parsing finished. Found {len(transactions)} items.")
-        return transactions
+                        transactions.append({
+                            "date": dt,
+                            "description": desc_str[:500],
+                            "amount": abs(amount),
+                            "is_income": is_income,
+                            "currency": settings.DEFAULT_CURRENCY
+                        })
+
+                        matched = True
+                        break
+
+                    except (DateParseError, AmountParseError) as e:
+                        errors.append(f"Line {line_num}: {str(e)}")
+                        matched = True
+                        break
+                    except Exception as e:
+                        errors.append(f"Line {line_num}: Unexpected error - {str(e)}")
+                        logger.error(f"PDF line parse error: {e}", exc_info=True)
+                        matched = True
+                        break
+
+            # Защита от слишком больших файлов
+            if len(transactions) >= settings.MAX_TRANSACTIONS_PER_FILE:
+                errors.append(f"Reached max transactions limit ({settings.MAX_TRANSACTIONS_PER_FILE})")
+                break
+
+        if not transactions and len(errors) == 0:
+            errors.append("No transactions found. PDF format may not be supported.")
+
+        logger.info(f"PDF parsing finished. Found {len(transactions)} transactions, {len(errors)} errors")
+        return transactions, errors
 
     except Exception as e:
-        print(f"Critical PDF Error: {e}")
-        return []
+        logger.error(f"Critical PDF parsing error: {e}", exc_info=True)
+        errors.append(f"Critical error: {str(e)}")
+        return transactions, errors

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion'; // <-- Анимации
+import { motion, AnimatePresence } from 'framer-motion';
 import { FileUpload } from './components/FileUpload';
 import { TransactionList } from './components/TransactionList';
 import { CategoryChart } from './components/CategoryChart';
@@ -9,8 +9,9 @@ import { BudgetList } from './components/BudgetList';
 import { InsightsPanel } from './components/InsightsPanel';
 import { ChatWidget } from './components/ChatWidget';
 import { GoalList } from './components/GoalList';
+import { WeeklyReport } from './components/WeeklyReport';
 import { transactionService, categoryService, budgetService, insightService, goalService } from './services/api';
-import { LayoutDashboard, Calendar, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Calendar, RefreshCw, FileText } from 'lucide-react';
 
 function App() {
   const [transactions, setTransactions] = useState([]);
@@ -20,8 +21,8 @@ function App() {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dateFilter, setDateFilter] = useState("2025-12");
+  const [activeView, setActiveView] = useState('dashboard');
 
-  // ... (Оставляем функции getPeriodBounds и fetchData без изменений) ...
   const getPeriodBounds = () => {
     if (!dateFilter) return { startDate: '', endDate: '' };
     const [year, month] = dateFilter.split('-');
@@ -33,19 +34,25 @@ function App() {
     setLoading(true);
     const { startDate, endDate } = getPeriodBounds();
     try {
-      const [cats, trans, buds, ins, gls] = await Promise.all([
+      const [cats, transResponse, buds, ins, gls] = await Promise.all([
         categoryService.getAll().catch(() => []),
-        transactionService.getAll({ start_date: startDate, end_date: endDate }).catch(() => []),
+        transactionService.getAll({ start_date: startDate, end_date: endDate }).catch(() => ({ items: [] })),
         budgetService.getStatus(startDate, endDate).catch(() => []),
         insightService.getAll().catch(() => []),
         goalService.getAll().catch(() => [])
       ]);
+
       setCategories(cats);
-      setTransactions(trans);
+      // Extract items array from paginated response
+      const txnArray = transResponse?.items || transResponse || [];
+      console.log('Transactions fetched:', txnArray);
+      setTransactions(txnArray);
       setBudgets(buds);
       setInsights(ins);
       setGoals(gls);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error('Failed to fetch data:', e);
+    }
     setLoading(false);
   };
 
@@ -53,7 +60,6 @@ function App() {
   const handleRefresh = () => { fetchData(); };
   const { startDate, endDate } = getPeriodBounds();
 
-  // Анимационные варианты
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
@@ -62,6 +68,9 @@ function App() {
     hidden: { y: 20, opacity: 0 },
     visible: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 100 } }
   };
+
+  console.log('Current view:', activeView);
+  console.log('Transactions count:', transactions.length);
 
   return (
     <div className="min-h-screen pb-20 bg-slate-50 text-slate-900 selection:bg-blue-100">
@@ -81,6 +90,32 @@ function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Toggle button between dashboard and report */}
+            <button
+              onClick={() => {
+                const newView = activeView === 'dashboard' ? 'report' : 'dashboard';
+                console.log('Switching view to:', newView);
+                setActiveView(newView);
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${
+                activeView === 'dashboard'
+                  ? 'text-slate-600 hover:bg-slate-100'
+                  : 'bg-blue-500 text-white hover:bg-blue-600'
+              }`}
+            >
+              {activeView === 'dashboard' ? (
+                <>
+                  <FileText size={18} />
+                  <span>Отчёт</span>
+                </>
+              ) : (
+                <>
+                  <LayoutDashboard size={18} />
+                  <span>Дашборд</span>
+                </>
+              )}
+            </button>
+
             <div className="hidden md:block text-xs font-medium text-slate-500 bg-white/50 px-3 py-1.5 rounded-full border border-slate-200">
               {startDate} — {endDate}
             </div>
@@ -102,52 +137,76 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content with Staggered Animation */}
-      <motion.main
-        className="max-w-7xl mx-auto px-4 sm:px-6 pt-8"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        <motion.div variants={itemVariants}>
-          <InsightsPanel insights={insights} />
-        </motion.div>
+      {/* Main content with switching between dashboard and report */}
+      <AnimatePresence mode="wait">
+        {activeView === 'dashboard' ? (
+          <motion.main
+            key="dashboard"
+            className="max-w-7xl mx-auto px-4 sm:px-6 pt-8"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+          >
+            <motion.div variants={itemVariants}>
+              <InsightsPanel insights={insights} />
+            </motion.div>
 
-        <motion.div variants={itemVariants}>
-          <SummaryCards transactions={transactions} />
-        </motion.div>
+            <motion.div variants={itemVariants}>
+              <SummaryCards transactions={transactions} />
+            </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          {/* Левая колонка */}
-          <motion.div className="lg:col-span-1 flex flex-col gap-8" variants={itemVariants}>
-            <FileUpload onUploadSuccess={handleRefresh} />
-            <BudgetList budgets={budgets} categories={categories} dateRange={{ startDate, endDate }} onUpdate={handleRefresh} />
-            <CategoryChart transactions={transactions} />
-          </motion.div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+              {/* Left column */}
+              <motion.div className="lg:col-span-1 flex flex-col gap-8" variants={itemVariants}>
+                <FileUpload onUploadSuccess={handleRefresh} />
+                <BudgetList budgets={budgets} categories={categories} dateRange={{ startDate, endDate }} onUpdate={handleRefresh} />
+                <CategoryChart transactions={transactions} />
+              </motion.div>
 
-          {/* Правая колонка */}
-          <motion.div className="lg:col-span-2 flex flex-col gap-8" variants={itemVariants}>
-             <TrendChart transactions={transactions} />
-             <GoalList goals={goals} onUpdate={handleRefresh} />
+              {/* Right column */}
+              <motion.div className="lg:col-span-2 flex flex-col gap-8" variants={itemVariants}>
+                <TrendChart transactions={transactions} />
+                <GoalList goals={goals} onUpdate={handleRefresh} />
 
-             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
-                  <h2 className="text-lg font-bold text-slate-800">
-                    История операций
-                  </h2>
-                  <span className="text-xs font-medium px-2 py-1 bg-slate-100 rounded-lg text-slate-500">
-                    {transactions.length} записей
-                  </span>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+                    <h2 className="text-lg font-bold text-slate-800">
+                      История операций
+                    </h2>
+                    <span className="text-xs font-medium px-2 py-1 bg-slate-100 rounded-lg text-slate-500">
+                      {transactions.length} записей
+                    </span>
+                  </div>
+                  {loading && transactions.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400">Загрузка данных...</div>
+                  ) : (
+                    <TransactionList transactions={transactions} categories={categories} onTransactionUpdate={handleRefresh} />
+                  )}
                 </div>
-                {loading && transactions.length === 0 ? (
-                  <div className="p-12 text-center text-slate-400">Загрузка данных...</div>
-                ) : (
-                  <TransactionList transactions={transactions} categories={categories} onTransactionUpdate={handleRefresh} />
-                )}
+              </motion.div>
             </div>
-          </motion.div>
-        </div>
-      </motion.main>
+          </motion.main>
+        ) : (
+          <motion.main
+            key="report"
+            className="max-w-7xl mx-auto px-4 sm:px-6 pt-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            <WeeklyReport
+              transactions={transactions}
+              categories={categories}
+              budgets={budgets}
+              insights={insights}
+              goals={goals}
+              dateRange={{ startDate, endDate }}
+            />
+          </motion.main>
+        )}
+      </AnimatePresence>
 
       <ChatWidget />
     </div>
