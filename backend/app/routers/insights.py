@@ -5,26 +5,55 @@ from typing import List
 from app.database import get_db
 from app.models import Insight
 from app.schemas import InsightResponse
-from app.agents.analytics import analytics_agent
-from app.agents.forecaster import forecast_agent  # <-- Импорт
+from app.core.auth import get_current_user
+
+# Import the new advanced agents
+from app.agents.predictive_analytics import predictive_analytics_agent
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
-TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
-
 
 @router.get("/", response_model=List[InsightResponse])
-def get_insights(db: Session = Depends(get_db)):
-    """Получить список актуальных инсайтов (аналитика + прогнозы)"""
+def get_insights(
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive AI-generated insights.
 
-    # 1. Запускаем аналитику (поиск аномалий)
-    analytics_agent.run_analysis(db, TEST_USER_ID)
+    Includes:
+    - Anomaly detection
+    - Budget warnings
+    - Behavioral analysis
+    - Spending predictions
+    - Optimization opportunities
+    - Goal tracking
+    """
 
-    # 2. Запускаем прогнозирование (будущее)
-    forecast_agent.generate_forecast(db, TEST_USER_ID)
+    # Run comprehensive analysis with advanced agent
+    predictive_analytics_agent.run_comprehensive_analysis(db, user_id)
 
-    # Возвращаем всё, сортируя по дате создания
-    return db.query(Insight) \
-        .filter(Insight.user_id == TEST_USER_ID) \
+    # Return all insights sorted by priority
+    insights = db.query(Insight) \
+        .filter(Insight.user_id == user_id) \
         .order_by(Insight.created_at.desc()) \
         .all()
+
+    return insights
+
+
+@router.post("/refresh")
+def refresh_insights(
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    Manually trigger insights regeneration.
+    """
+    count = predictive_analytics_agent.run_comprehensive_analysis(db, user_id)
+
+    return {
+        "status": "success",
+        "insights_generated": count,
+        "message": f"Generated {count} new insights"
+    }

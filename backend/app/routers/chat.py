@@ -4,9 +4,18 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 from app.database import get_db
-from app.agents.chat_agent import chat_agent
 from app.services.ollama_client import ollama_client
 from app.core.auth import get_current_user
+
+# Import advanced chat agent
+try:
+    from app.agents.advanced_chat_agent import advanced_chat_agent
+    USE_ADVANCED = True
+except ImportError:
+    # Fallback to basic agent if advanced not available
+    from app.agents.chat_agent import chat_agent
+    USE_ADVANCED = False
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,12 +30,14 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     status: str = "success"
+    agent_type: str = "advanced" if USE_ADVANCED else "basic"
 
 
 class HealthCheckResponse(BaseModel):
     ollama_status: str
     available_models: list[str]
     current_model: str
+    agent_type: str
 
 
 @router.post("/", response_model=ChatResponse)
@@ -36,39 +47,56 @@ async def chat(
         db: Session = Depends(get_db)
 ):
     """
-    Общение с AI финансовым ассистентом.
+    Общение с AI финансовым психологом.
 
-    Ассистент может отвечать на вопросы о:
-    - Балансе и текущей финансовой ситуации
-    - Расходах по категориям
-    - Статусе бюджетов
-    - Финансовых целях
-    - Последних транзакциях
-    - Рекомендациях и инсайтах
+    **Advanced Agent возможности:**
+    - Анализ финансового здоровья
+    - Выявление поведенческих паттернов (импульсивность, стресс-траты)
+    - Проактивные рекомендации
+    - Эмпатичный тон с конкретными действиями
+    - Прогнозирование и риск-анализ
+
+    **Примеры вопросов:**
+    - "Почему я так много трачу?"
+    - "Где я могу сэкономить?"
+    - "Смогу ли я накопить на отпуск?"
+    - "Какие у меня импульсивные траты?"
     """
     try:
         logger.info(f"Processing chat message from user {user_id}: {request.message[:50]}...")
 
-        response_text = await chat_agent.process_message(
-            db=db,
-            user_id=user_id,
-            message=request.message
-        )
+        if USE_ADVANCED:
+            response_text = await advanced_chat_agent.process_message(
+                db=db,
+                user_id=user_id,
+                message=request.message
+            )
+        else:
+            response_text = await chat_agent.process_message(
+                db=db,
+                user_id=user_id,
+                message=request.message
+            )
 
-        return ChatResponse(response=response_text, status="success")
+        return ChatResponse(
+            response=response_text,
+            status="success",
+            agent_type="advanced" if USE_ADVANCED else "basic"
+        )
 
     except Exception as e:
         logger.error(f"Error processing chat message: {e}", exc_info=True)
         return ChatResponse(
             response="Извините, произошла ошибка при обработке вашего запроса. Попробуйте переформулировать вопрос.",
-            status="error"
+            status="error",
+            agent_type="advanced" if USE_ADVANCED else "basic"
         )
 
 
 @router.get("/health", response_model=HealthCheckResponse)
 async def check_health():
     """
-    Проверяет доступность Ollama и список доступных моделей.
+    Проверяет доступность Ollama и тип используемого агента.
     """
     try:
         is_available = await ollama_client.check_health()
@@ -84,7 +112,8 @@ async def check_health():
         return HealthCheckResponse(
             ollama_status="available",
             available_models=models,
-            current_model=ollama_client.model
+            current_model=ollama_client.model,
+            agent_type="advanced" if USE_ADVANCED else "basic"
         )
 
     except Exception as e:
@@ -111,7 +140,8 @@ async def test_ollama(prompt: str = "Привет! Как дела?"):
             "status": "success",
             "prompt": prompt,
             "response": response,
-            "model": ollama_client.model
+            "model": ollama_client.model,
+            "agent_type": "advanced" if USE_ADVANCED else "basic"
         }
 
     except Exception as e:
