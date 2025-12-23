@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* src/index.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,39 +7,30 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #F8FAFC; /* Slate-50: более холодный и чистый оттенок */
-  color: #0F172A; /* Slate-900 */
+  background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 50%, #c7d2fe 100%);
+  color: #0f172a;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
-/* Кастомный скроллбар */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
-  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: rgba(148, 163, 184, 0.4);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
-}
-
-/* Утилиты для стекла (Glassmorphism) */
-.glass {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-/* Плавный переход для всех интерактивных элементов */
-.btn-hover {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.btn-hover:active {
-  transform: scale(0.95);
+  background: rgba(100, 116, 139, 0.6);
 }
