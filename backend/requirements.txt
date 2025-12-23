@@ -30,3 +30,4 @@ passlib[bcrypt]==1.7.4
 # Опционально для продакшена
 # gunicorn==23.0.0
 # sentry-sdk[fastapi]==2.18.0
+APScheduler==3.10.4

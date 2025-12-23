@@ -7,6 +7,7 @@ import logging
 
 from app.database import engine, Base
 from app.routers import transactions, categories, budgets, goals, insights, chat, reports, profile
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 # Logging setup
 logging.basicConfig(
@@ -94,6 +95,17 @@ async def startup_event():
         db.close()
 
     logger.info("✅ Database initialized")
+
+    # 🔥 START SCHEDULER
+    logger.info("")
+    logger.info("⏰ Starting automated tasks...")
+    try:
+        start_scheduler()
+        logger.info("✅ Scheduler started: Weekly reports + Daily analytics")
+    except Exception as e:
+        logger.error(f"❌ Failed to start scheduler: {e}")
+
+    logger.info("")
     logger.info("🧠 Advanced AI agents ready:")
     logger.info("   - Personalized Chat Agent (adapts to user personality)")
     logger.info("   - Predictive Analytics Agent (forecasts & anomalies)")
@@ -110,6 +122,12 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("👋 Shutting down WealthWise AI...")
+
+    # Stop scheduler
+    try:
+        stop_scheduler()
+    except Exception as e:
+        logger.error(f"Error stopping scheduler: {e}")
 
 
 @app.get("/")
