@@ -3,125 +3,121 @@ import { Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { budgetService } from '../services/api';
 
 export const BudgetList = ({ budgets, categories, dateRange, onUpdate }) => {
-  const [isAdding, setIsAdding] = useState(false);
-  const [newBudget, setNewBudget] = useState({ categoryId: '', amount: '' });
+	const [isAdding, setIsAdding] = useState(false);
+	const [newBudget, setNewBudget] = useState({ categoryId: '', amount: '' });
 
-  const formatCurrency = (val) => new Intl.NumberFormat('ru-RU', {
-    style: 'currency', currency: 'RUB', maximumFractionDigits: 0
-  }).format(val);
+	const formatCurrency = (val) => new Intl.NumberFormat('ru-RU', {
+		style: 'currency', currency: 'RUB', maximumFractionDigits: 0
+	}).format(val);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!newBudget.categoryId || !newBudget.amount) return;
+	const handleSubmit = async (e) => {
+		e.preventDefault();
+		if (!newBudget.categoryId || !newBudget.amount) return;
 
-    try {
-      await budgetService.create(newBudget.categoryId, newBudget.amount);
-      setNewBudget({ categoryId: '', amount: '' });
-      setIsAdding(false);
-      onUpdate(); // Обновляем данные
-    } catch (error) {
-      console.error("Failed to create budget", error);
-    }
-  };
+		try {
+			await budgetService.create(newBudget.categoryId, newBudget.amount);
+			setNewBudget({ categoryId: '', amount: '' });
+			setIsAdding(false);
+			onUpdate(); // Обновляем данные
+		} catch (error) {
+			console.error("Failed to create budget", error);
+		}
+	};
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Удалить этот бюджет?')) {
-      try {
-        await budgetService.delete(id);
-        onUpdate();
-      } catch (error) {
-        console.error("Failed to delete budget", error);
-      }
-    }
-  };
+	const handleDelete = async (id) => {
+		if (window.confirm('Удалить этот бюджет?')) {
+			try {
+				await budgetService.delete(id);
+				onUpdate();
+			} catch (error) {
+				console.error("Failed to delete budget", error);
+			}
+		}
+	};
 
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-sm h-full flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-gray-800">Бюджеты на месяц</h3>
-        <button
-          onClick={() => setIsAdding(!isAdding)}
-          className="text-primary hover:bg-blue-50 p-1 rounded transition"
-          title="Добавить бюджет"
-        >
-          <Plus size={20} />
-        </button>
-      </div>
+	return (
+		<div className="budget-card">
+			<div className="budget-card__header">
+				<h3 className="budget-card__title">Бюджеты</h3>
+				<button
+					onClick={() => setIsAdding(!isAdding)}
+					className={`budget-card__toggle-btn ${isAdding ? 'budget-card__toggle-btn--active' : ''}`}
+				>
+					{isAdding ? <X size={18} /> : <Plus size={18} />}
+				</button>
+			</div>
 
-      {/* Форма добавления */}
-      {isAdding && (
-        <form onSubmit={handleSubmit} className="mb-6 p-3 bg-gray-50 rounded border border-blue-100">
-          <div className="flex flex-col gap-2">
-            <select
-              className="border rounded p-2 text-sm"
-              value={newBudget.categoryId}
-              onChange={(e) => setNewBudget({...newBudget, categoryId: e.target.value})}
-              required
-            >
-              <option value="">Выберите категорию</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <input
-              type="number"
-              placeholder="Лимит (₽)"
-              className="border rounded p-2 text-sm"
-              value={newBudget.amount}
-              onChange={(e) => setNewBudget({...newBudget, amount: e.target.value})}
-              required
-            />
-            <button type="submit" className="bg-primary text-white py-1 rounded text-sm hover:bg-blue-600">
-              Сохранить
-            </button>
-          </div>
-        </form>
-      )}
+			{isAdding && (
+				<form onSubmit={handleSubmit} className="budget-form">
+					<div className="budget-form__group">
+						<select
+							className="budget-form__select"
+							value={newBudget.categoryId}
+							onChange={(e) => setNewBudget({ ...newBudget, categoryId: e.target.value })}
+							required
+						>
+							<option value="">Категория</option>
+							{categories.map(c => (
+								<option key={c.id} value={c.id}>{c.name}</option>
+							))}
+						</select>
+						<input
+							type="number"
+							placeholder="Лимит (₽)"
+							className="budget-form__input"
+							value={newBudget.amount}
+							onChange={(e) => setNewBudget({ ...newBudget, amount: e.target.value })}
+							required
+						/>
+					</div>
+					<button type="submit" className="budget-form__submit">
+						Установить лимит
+					</button>
+				</form>
+			)}
 
-      {/* Список бюджетов */}
-      <div className="space-y-6 overflow-y-auto flex-1 pr-2">
-        {budgets.length === 0 && !isAdding && (
-          <p className="text-gray-400 text-sm text-center py-4">Нет активных бюджетов</p>
-        )}
+			<div className="budget-list">
+				{budgets.length === 0 && !isAdding && (
+					<div className="budget-list__empty">Нет активных лимитов</div>
+				)}
 
-        {budgets.map((b) => (
-          <div key={b.id} className="group relative">
-            <div className="flex justify-between text-sm mb-1">
-              <span className="font-medium text-gray-700">{b.category_name}</span>
-              <span className="text-gray-500">
-                {formatCurrency(b.spent_amount)} / {formatCurrency(b.limit_amount)}
-              </span>
-            </div>
+				{budgets.map((b) => (
+					<div key={b.id} className="budget-item">
+						<div className="budget-item__info">
+							<span className="budget-item__name">{b.category_name}</span>
+							<span className="budget-item__values">
+								<span className="budget-item__spent">{formatCurrency(b.spent_amount)}</span>
+								<span className="budget-item__separator">/</span>
+								<span className="budget-item__limit">{formatCurrency(b.limit_amount)}</span>
+							</span>
+						</div>
 
-            {/* Прогресс бар */}
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  b.is_exceeded ? 'bg-danger' :
-                  b.percentage > 80 ? 'bg-orange-400' : 'bg-success'
-                }`}
-                style={{ width: `${Math.min(b.percentage, 100)}%` }}
-              />
-            </div>
+						<div className="budget-item__progress-container">
+							<div
+								className={`budget-item__progress-bar ${b.is_exceeded ? 'budget-item__progress-bar--danger' :
+										b.percentage > 80 ? 'budget-item__progress-bar--warning' : ''
+									}`}
+								style={{ width: `${Math.min(b.percentage, 100)}%` }}
+							/>
+						</div>
 
-            {/* Сообщение о превышении */}
-            {b.is_exceeded && (
-              <div className="flex items-center gap-1 text-xs text-danger mt-1">
-                <AlertTriangle size={12} />
-                <span>Превышение на {formatCurrency(b.spent_amount - b.limit_amount)}</span>
-              </div>
-            )}
+						{b.is_exceeded && (
+							<div className="budget-item__alert">
+								<AlertTriangle size={12} />
+								<span>Превышено на {formatCurrency(b.spent_amount - b.limit_amount)}</span>
+							</div>
+						)}
 
-            {/* Кнопка удаления (появляется при наведении) */}
-            <button
-              onClick={() => handleDelete(b.id)}
-              className="absolute -right-6 top-0 text-gray-300 hover:text-danger opacity-0 group-hover:opacity-100 transition"
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+						<button
+							onClick={() => handleDelete(b.id)}
+							className="budget-item__delete"
+							aria-label="Удалить"
+						>
+							<Trash2 size={14} />
+						</button>
+					</div>
+				))}
+			</div>
+		</div>
+	);
 };

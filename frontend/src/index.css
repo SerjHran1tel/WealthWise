@@ -1,9 +1,4 @@
-/* src/index.css */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 :root {
 	--fontFamily: "Inter";
@@ -13,8 +8,26 @@
 	--maxWidth: 1920px;
 	--maxWidthContainer: 1440px; /* ширина контейнера + паддинг, например 1170 + 30 */
 	--containerPadding: 16px;
-	/* Цвета */
-	--mainColor: #111;
+	/* Цветовая палитра - более глубокие и насыщенные оттенки */
+	--primary-color: #4f46e5;
+	--primary-hover: #4338ca;
+	--accent-color: #06b6d4;
+	--bg-main: #f8fafc;
+	--text-main: #111;
+	--text-muted: #64748b;
+	--white: #ffffff;
+
+	/* Эффект стекла */
+	--glass-bg: rgba(255, 255, 255, 0.75);
+	--glass-border: rgba(255, 255, 255, 0.5);
+
+	/* Тени - многослойные для мягкости */
+	--shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+	--shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+	--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.06);
+	--shadow-premium: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+
+	--transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
@@ -135,12 +148,4 @@ h6 {
 	max-width: var(--maxWidthContainer);
 	margin: 0 auto;
 	padding: 0 var(--containerPadding);
-}
-
-.glass {
-	background: rgba(255, 255, 255, 0.65);
-	backdrop-filter: blur(16px);
-	-webkit-backdrop-filter: blur(16px);
-	border: 1px solid rgba(255, 255, 255, 0.4);
-	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
