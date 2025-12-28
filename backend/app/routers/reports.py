@@ -4,7 +4,8 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 
 from app.database import get_db
-from app.agents.report_agent import report_agent
+from app.agents.weekly_report_agent import weekly_report_agent
+from app.services.scheduler import trigger_weekly_report_now, get_scheduler_status
 from app.core.auth import get_current_user
 import logging
 
@@ -13,14 +14,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
+class ActionItem(BaseModel):
+    id: str
+    type: str
+    priority: str
+    title: str
+    description: str
+    actions: List[Dict]
+
+
 class WeeklyReportResponse(BaseModel):
     period: str
     stats: Dict
     comparison: Dict
     top_categories: List[Dict]
-    issues: List[str]
+    issues: List[Dict]
     recommendations: List[str]
+    actions: List[Dict]
     goals_progress: List[Dict]
+    generated_at: str
+
+
+class SchedulerStatusResponse(BaseModel):
+    running: bool
+    jobs_count: int
+    jobs: List[Dict]
 
 
 @router.get("/weekly", response_model=WeeklyReportResponse)
@@ -29,20 +47,21 @@ async def get_weekly_report(
         db: Session = Depends(get_db)
 ):
     """
-    Генерирует еженедельный отчёт с аналитикой и рекомендациями.
+    Получить еженедельный отчёт с аналитикой, рекомендациями и действиями.
 
     Включает:
     - Статистику за последние 7 дней
     - Сравнение с предыдущей неделей
     - Топ категорий расходов
     - Выявленные проблемы
-    - AI-generated рекомендации
+    - AI-generated персонализированные рекомендации
+    - Конкретные действия для выполнения
     - Прогресс по целям
     """
     try:
         logger.info(f"Generating weekly report for user {user_id}")
 
-        report = await report_agent.generate_weekly_report(db, user_id)
+        report = await weekly_report_agent.generate_weekly_report(db, user_id)
 
         return WeeklyReportResponse(**report)
 
@@ -54,29 +73,90 @@ async def get_weekly_report(
         )
 
 
-@router.post("/trigger-weekly")
-async def trigger_weekly_report_for_all(db: Session = Depends(get_db)):
+@router.post("/weekly/trigger")
+async def trigger_weekly_report(
+        user_id: str = Depends(get_current_user)
+):
     """
-    Триггер для генерации еженедельных отчётов для всех пользователей.
-    Можно вызывать по расписанию (cron).
+    Вручную запустить генерацию еженедельного отчёта.
+
+    Используется для:
+    - Тестирования системы
+    - Получения отчёта вне расписания
+    - Повторной генерации отчёта
     """
-    # В реальном приложении здесь был бы список всех пользователей
-    # Для MVP используем тестового пользователя
-
-    TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
-
     try:
-        report = await report_agent.generate_weekly_report(db, TEST_USER_ID)
+        logger.info(f"Manual trigger: Generating weekly report for user {user_id}")
+
+        # Запускаем генерацию отчёта
+        trigger_weekly_report_now()
 
         return {
             "status": "success",
-            "message": "Weekly reports generated",
-            "users_processed": 1
+            "message": "Weekly report generation triggered",
+            "user_id": user_id
         }
 
     except Exception as e:
-        logger.error(f"Error in weekly report trigger: {e}", exc_info=True)
+        logger.error(f"Error triggering weekly report: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to trigger reports: {str(e)}"
+            detail=f"Failed to trigger report: {str(e)}"
+        )
+
+
+@router.get("/scheduler/status", response_model=SchedulerStatusResponse)
+async def get_scheduler_status_endpoint():
+    """
+    Получить статус scheduler и список запланированных задач.
+
+    Показывает:
+    - Запущен ли scheduler
+    - Количество активных задач
+    - Расписание каждой задачи
+    - Время следующего запуска
+    """
+    try:
+        status = get_scheduler_status()
+        return SchedulerStatusResponse(**status)
+
+    except Exception as e:
+        logger.error(f"Error getting scheduler status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get scheduler status: {str(e)}"
+        )
+
+
+@router.post("/actions/{action_id}/execute")
+async def execute_action(
+        action_id: str,
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    Выполнить конкретное действие из еженедельного отчёта.
+
+    Примеры действий:
+    - increase_budget: Увеличить бюджет категории
+    - cancel_subscriptions: Отменить подписки
+    - deposit_to_goal: Пополнить цель
+    - set_alert: Установить уведомление
+    """
+    try:
+
+        logger.info(f"Executing action {action_id} for user {user_id}")
+
+        return {
+            "status": "success",
+            "action_id": action_id,
+            "message": f"Action {action_id} executed",
+            "note": "Implementation pending"
+        }
+
+    except Exception as e:
+        logger.error(f"Error executing action: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to execute action: {str(e)}"
         )
