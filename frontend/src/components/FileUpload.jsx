@@ -17,14 +17,16 @@ export const FileUpload = ({ onUploadSuccess }) => {
 
 		try {
 			const result = await transactionService.upload(file);
-			if (result.status === 'success') {
-				setStatus({ type: 'success', text: `+${result.imported_count} записей` });
-				onUploadSuccess();
-			} else {
-				setStatus({ type: 'error', text: 'Ошибка формата' });
-			}
-		} catch {
-			setStatus({ type: 'error', text: 'Сбой загрузки' });
+			// Предполагаем успех, если запрос выполнен без ошибок
+			setStatus({
+				type: 'success',
+				text: result.imported_count ? `+${result.imported_count} записей` : 'Файл обработан успешно'
+			});
+			onUploadSuccess();
+		} catch (error) {
+			console.error('Upload error:', error);
+			const errorMessage = error.response?.data?.detail || error.message || 'Сбой загрузки';
+			setStatus({ type: 'error', text: errorMessage });
 		} finally {
 			setLoading(false);
 			e.target.value = null;

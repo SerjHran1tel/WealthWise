@@ -23,7 +23,7 @@ export const SummaryCards = ({ transactions = [] }) => {
 							{amount}
 						</Typography>
 					</Box>
-					<Box sx={{ p: 1.5, bgcolor: `${color}.lighter`, borderRadius: 2, color: `${color}.main` }}>
+					<Box sx={{ p: 1.5, bgcolor: `${color}.light`, borderRadius: 2, color: `${color}.main` }}>
 						<Icon fontSize="large" />
 					</Box>
 				</Box>

@@ -13,10 +13,12 @@ import {
 	Warning as AlertCircleIcon,
 	EmojiEvents as TargetIcon,
 } from '@mui/icons-material';
+import { reportService } from '../services/api';
 
 export const WeeklyReport = () => {
 	const [report, setReport] = useState(null);
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState(null);
 
 	useEffect(() => {
 		fetchReport();
@@ -24,11 +26,12 @@ export const WeeklyReport = () => {
 
 	const fetchReport = async () => {
 		try {
-			const res = await fetch('http://localhost:8000/api/reports/weekly');
-			const data = await res.json();
+			setError(null);
+			const data = await reportService.getWeekly();
 			setReport(data);
 		} catch (error) {
 			console.error('Failed to load report:', error);
+			setError('Не удалось загрузить отчёт. Проверьте соединение с сервером.');
 		} finally {
 			setLoading(false);
 		}
@@ -39,6 +42,13 @@ export const WeeklyReport = () => {
 			<CircularProgress />
 		</Box>
 	);
+
+	if (error) return (
+		<Alert severity="error" sx={{ mt: 2 }}>
+			{error}
+		</Alert>
+	);
+
 	if (!report) return null;
 
 	return (
@@ -55,7 +65,7 @@ export const WeeklyReport = () => {
 
 			{/* Stats */}
 			<Grid container spacing={2} sx={{ mb: 3 }}>
-				<Grid item xs={4}>
+				<Grid item xs={12} sm={4}>
 					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'primary.light' }}>
 						<Typography variant="caption" color="primary.contrastText">Расходы</Typography>
 						<Typography variant="h5" fontWeight="bold" color="primary.contrastText">
@@ -63,7 +73,7 @@ export const WeeklyReport = () => {
 						</Typography>
 					</Paper>
 				</Grid>
-				<Grid item xs={4}>
+				<Grid item xs={12} sm={4}>
 					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'success.light' }}>
 						<Typography variant="caption" color="success.contrastText">Доходы</Typography>
 						<Typography variant="h5" fontWeight="bold" color="success.contrastText">
@@ -71,7 +81,7 @@ export const WeeklyReport = () => {
 						</Typography>
 					</Paper>
 				</Grid>
-				<Grid item xs={4}>
+				<Grid item xs={12} sm={4}>
 					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'secondary.light' }}>
 						<Typography variant="caption" color="secondary.contrastText">Баланс</Typography>
 						<Typography variant="h5" fontWeight="bold" color="secondary.contrastText">

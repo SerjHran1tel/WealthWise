@@ -17,6 +17,8 @@ import {
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import { transactionService } from '../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
+import { parseISO, format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 export const TransactionList = ({ transactions = [], categories = [], onTransactionUpdate }) => {
 	const [editingId, setEditingId] = useState(null);
@@ -25,23 +27,32 @@ export const TransactionList = ({ transactions = [], categories = [], onTransact
 		new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(amount);
 
 	const handleDelete = async (id) => {
-		if (window.confirm('Удалить?')) {
+		if (!window.confirm('Удалить?')) return;
+		try {
 			await transactionService.delete(id);
 			onTransactionUpdate();
+		} catch (error) {
+			console.error('Delete error:', error);
+			alert('Не удалось удалить транзакцию');
 		}
 	};
 
 	const handleCategoryChange = async (transactionId, newCategoryId) => {
-		await transactionService.update(transactionId, { category_id: newCategoryId });
-		onTransactionUpdate();
-		setEditingId(null);
+		try {
+			await transactionService.update(transactionId, { category_id: newCategoryId });
+			onTransactionUpdate();
+			setEditingId(null);
+		} catch (error) {
+			console.error('Update error:', error);
+			alert('Не удалось обновить категорию');
+		}
 	};
 
 	if (!transactions.length) return null;
 
 	return (
-		<TableContainer component={Paper} variant="outlined">
-			<Table size="small">
+		<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+			<Table size="small" sx={{ minWidth: { xs: 600, sm: '100%' } }}>
 				<TableHead sx={{ bgcolor: 'action.hover' }}>
 					<TableRow>
 						<TableCell>Дата</TableCell>
@@ -63,7 +74,7 @@ export const TransactionList = ({ transactions = [], categories = [], onTransact
 								sx={{ '&:hover': { bgcolor: 'action.hover' } }}
 							>
 								<TableCell>
-									{new Date(t.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+									{format(parseISO(t.date), 'd MMM', { locale: ru })}
 								</TableCell>
 								<TableCell>
 									{editingId === t.id ? (

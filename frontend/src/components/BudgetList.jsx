@@ -30,6 +30,7 @@ export const BudgetList = ({ budgets, categories, onUpdate }) => {
 			onUpdate();
 		} catch (error) {
 			console.error('Failed to create budget', error);
+			// Здесь можно показать уведомление пользователю
 		}
 	};
 
@@ -44,16 +45,24 @@ export const BudgetList = ({ budgets, categories, onUpdate }) => {
 		}
 	};
 
+	const hasCategories = categories && categories.length > 0;
+
 	return (
 		<Paper sx={{ p: 3 }}>
 			<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
 				<Typography variant="h6">Бюджеты на месяц</Typography>
-				<IconButton onClick={() => setIsAdding(!isAdding)} size="small">
+				<IconButton onClick={() => setIsAdding(!isAdding)} size="small" disabled={!hasCategories}>
 					<Add />
 				</IconButton>
 			</Box>
 
-			{isAdding && (
+			{!hasCategories && !isAdding && (
+				<Alert severity="info" sx={{ mb: 2 }}>
+					Сначала создайте категории в админке или загрузите транзакции с категориями.
+				</Alert>
+			)}
+
+			{isAdding && hasCategories && (
 				<Box component="form" onSubmit={handleSubmit} sx={{ mb: 3, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
 					<TextField
 						select
@@ -80,6 +89,7 @@ export const BudgetList = ({ budgets, categories, onUpdate }) => {
 						size="small"
 						fullWidth
 						required
+						inputProps={{ min: 0.01, step: 0.01 }}
 						sx={{ mb: 2 }}
 					/>
 					<Button type="submit" variant="contained" fullWidth>

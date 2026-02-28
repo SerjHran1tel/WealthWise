@@ -20,12 +20,13 @@ import { chatService } from '../services/api';
 export const ChatWidget = () => {
 	const [isOpen, setIsOpen] = useState(false);
 	const [messages, setMessages] = useState([
-		{ id: 1, text: 'Привет! Я твой финансовый ассистент. Спроси меня о балансе или тратах.', sender: 'bot' },
+		{ id: '1', text: 'Привет! Я твой финансовый ассистент. Спроси меня о балансе или тратах.', sender: 'bot' },
 	]);
 	const [inputValue, setInputValue] = useState('');
 	const [isLoading, setIsLoading] = useState(false);
 
 	const messagesEndRef = useRef(null);
+	const inputRef = useRef(null);
 
 	const scrollToBottom = () => {
 		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -33,24 +34,30 @@ export const ChatWidget = () => {
 
 	useEffect(() => {
 		scrollToBottom();
-	}, [messages, isOpen]);
+	}, [messages]);
+
+	useEffect(() => {
+		if (isOpen) {
+			inputRef.current?.focus();
+		}
+	}, [isOpen]);
 
 	const handleSend = async (e) => {
 		e.preventDefault();
 		if (!inputValue.trim()) return;
 
-		const userMsg = { id: Date.now(), text: inputValue, sender: 'user' };
+		const userMsg = { id: crypto.randomUUID(), text: inputValue, sender: 'user' };
 		setMessages((prev) => [...prev, userMsg]);
 		setInputValue('');
 		setIsLoading(true);
 
 		try {
 			const data = await chatService.sendMessage(userMsg.text);
-			const botMsg = { id: Date.now() + 1, text: data.response, sender: 'bot' };
+			const botMsg = { id: crypto.randomUUID(), text: data.response, sender: 'bot' };
 			setMessages((prev) => [...prev, botMsg]);
 		} catch (error) {
 			console.error('Chat error:', error);
-			const errorMsg = { id: Date.now() + 1, text: 'Ошибка связи с сервером.', sender: 'bot' };
+			const errorMsg = { id: crypto.randomUUID(), text: 'Ошибка связи с сервером.', sender: 'bot' };
 			setMessages((prev) => [...prev, errorMsg]);
 		} finally {
 			setIsLoading(false);
@@ -127,6 +134,7 @@ export const ChatWidget = () => {
 					{/* Input */}
 					<Box component="form" onSubmit={handleSend} sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 1 }}>
 						<TextField
+							inputRef={inputRef}
 							size="small"
 							fullWidth
 							placeholder="Спроси о финансах..."

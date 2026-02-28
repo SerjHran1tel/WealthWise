@@ -13,7 +13,10 @@ import {
 	Paper,
 	Badge,
 	CircularProgress,
-	useTheme,
+	BottomNavigation,
+	BottomNavigationAction,
+	Alert,
+	Snackbar,
 } from '@mui/material';
 import {
 	Dashboard as DashboardIcon,
@@ -43,14 +46,14 @@ import {
 } from './services/api';
 
 function App() {
-	const theme = useTheme();
 	const [transactions, setTransactions] = useState([]);
 	const [categories, setCategories] = useState([]);
 	const [budgets, setBudgets] = useState([]);
 	const [insights, setInsights] = useState([]);
 	const [goals, setGoals] = useState([]);
+	const [error, setError] = useState(null);
 	const [loading, setLoading] = useState(false);
-	const [dateFilter, setDateFilter] = useState('2025-12');
+	const [dateFilter, setDateFilter] = useState(() => format(new Date(), 'yyyy-MM'));
 	const [activeView, setActiveView] = useState('dashboard');
 
 	const getPeriodBounds = () => {
@@ -80,7 +83,9 @@ function App() {
 			setBudgets(buds || []);
 			setInsights(ins || []);
 			setGoals(gls || []);
+			setError(null);
 		} catch (err) {
+			setError('Не удалось загрузить данные. Проверьте соединение с сервером.');
 			console.error('Fetch error:', err);
 		} finally {
 			setLoading(false);
@@ -104,6 +109,7 @@ function App() {
 	const displayMonth = format(parseISO(`${dateFilter}-01`), 'LLLL yyyy', { locale: ru });
 
 	return (
+
 		<Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
 			<AppBar position="fixed" color="inherit" elevation={0} sx={{ backdropFilter: 'blur(12px)', bgcolor: 'rgba(255,255,255,0.8)' }}>
 				<Toolbar sx={{ justifyContent: 'space-between' }}>
@@ -131,27 +137,66 @@ function App() {
 						</Box>
 					</Box>
 
-					<Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-						<Paper elevation={0} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 0.5, bgcolor: 'rgba(255,255,255,0.7)' }}>
-							<IconButton onClick={() => changeMonth(-1)} size="small">
-								<ChevronLeftIcon />
+					<Box
+						sx={{
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'space-between',
+							width: '100%',
+							flexWrap: 'wrap',
+							gap: 1,
+						}}
+					>
+						{/* Блок с месяцем */}
+						<Paper
+							elevation={0}
+							sx={{
+								display: 'flex',
+								alignItems: 'center',
+								bgcolor: 'rgba(255,255,255,0.7)',
+								borderRadius: 20,
+								p: 0.2,
+								ml: 1, 
+								flex: { xs: '1 1 auto', sm: '0 1 auto' },
+								minWidth: { xs: '140px', sm: 'auto' },
+							}}
+						>
+							<IconButton onClick={() => changeMonth(-1)} size="small" sx={{ p: 0.5 }}>
+								<ChevronLeftIcon fontSize="small" />
 							</IconButton>
-							<Typography variant="body1" sx={{ fontWeight: 600, minWidth: 130, textAlign: 'center', textTransform: 'capitalize' }}>
+							<Typography
+								variant="body2"
+								sx={{
+									fontWeight: 600,
+									px: 1,
+									fontSize: { xs: '0.8rem', sm: '0.9rem' },
+									whiteSpace: 'nowrap',
+								}}
+							>
 								{displayMonth}
 							</Typography>
-							<IconButton onClick={() => changeMonth(1)} size="small">
-								<ChevronRightIcon />
+							<IconButton onClick={() => changeMonth(1)} size="small" sx={{ p: 0.5 }}>
+								<ChevronRightIcon fontSize="small" />
 							</IconButton>
 						</Paper>
 
-						<IconButton onClick={handleRefresh} disabled={loading}>
-							{loading ? <CircularProgress size={24} /> : <RefreshIcon />}
+						{/* Кнопка обновления */}
+						<IconButton
+							onClick={handleRefresh}
+							disabled={loading}
+							size="small"
+							sx={{
+								bgcolor: 'rgba(255,255,255,0.7)',
+								'&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
+							}}
+						>
+							{loading ? <CircularProgress size={20} /> : <RefreshIcon fontSize="small" />}
 						</IconButton>
 					</Box>
 				</Toolbar>
 			</AppBar>
 
-			<Container maxWidth="xl" sx={{ pt: 12, pb: 6 }}>
+			<Container maxWidth="xl" sx={{ pt: { xs: 10, sm: 12 }, pb: { xs: 10, sm: 12 } }}>
 				<AnimatePresence mode="wait">
 					{activeView === 'dashboard' ? (
 						<motion.div
@@ -210,7 +255,31 @@ function App() {
 					)}
 				</AnimatePresence>
 			</Container>
+			<Snackbar
+				open={!!error}
+				autoHideDuration={6000}
+				onClose={() => setError(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }} // можно изменить
+			>
+				<Alert
+					onClose={() => setError(null)}
+					severity="error"
+					variant="filled" // или "standard" / "outlined"
+					sx={{ width: '100%' }}
+				>
+					{error}
+				</Alert>
+			</Snackbar>
 
+			<BottomNavigation
+				value={activeView}
+				onChange={(event, newValue) => setActiveView(newValue)}
+				showLabels
+				sx={{ display: { xs: 'flex', md: 'none' }, position: 'fixed', bottom: 0, left: 0, right: 0 }}
+			>
+				<BottomNavigationAction label="Дашборд" value="dashboard" icon={<DashboardIcon />} />
+				<BottomNavigationAction label="Отчёт" value="report" icon={<CalendarIcon />} />
+			</BottomNavigation>
 			<ChatWidget />
 		</Box>
 	);

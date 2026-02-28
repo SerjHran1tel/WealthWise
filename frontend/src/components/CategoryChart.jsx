@@ -32,7 +32,7 @@ export const CategoryChart = ({ transactions = [] }) => {
 				Расходы по категориям
 			</Typography>
 			<Box sx={{ width: '100%', height: 320, display: 'flex', justifyContent: 'center' }}>
-				<PieChart width={350} height={320}>
+				<PieChart width="100%" height={320}>
 					<Pie
 						data={data}
 						cx="50%"
