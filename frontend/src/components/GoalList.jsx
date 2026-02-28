@@ -1,18 +1,37 @@
 import React, { useState } from 'react';
-import { Plus, Target, Trash2, Edit3, X } from 'lucide-react';
+import {
+	Paper,
+	Typography,
+	Box,
+	IconButton,
+	Button,
+	TextField,
+	LinearProgress,
+	Dialog,
+	DialogTitle,
+	DialogContent,
+	DialogActions,
+} from '@mui/material';
+import {
+	Add as PlusIcon,
+	EmojiEvents as TargetIcon,
+	Delete as TrashIcon,
+	Edit as EditIcon,
+	Close as XIcon,
+} from '@mui/icons-material';
 import { goalService } from '../services/api';
 
 export const GoalList = ({ goals, onUpdate }) => {
 	const [isAdding, setIsAdding] = useState(false);
 	const [editingId, setEditingId] = useState(null);
+	const [depositDialog, setDepositDialog] = useState({ open: false, id: null, currentAmount: 0 });
 
 	const [newGoal, setNewGoal] = useState({
 		name: '', target_amount: '', current_amount: '0', deadline: '', color: '#3B82F6'
 	});
 
-	const formatCurrency = (val) => new Intl.NumberFormat('ru-RU', {
-		style: 'currency', currency: 'RUB', maximumFractionDigits: 0
-	}).format(val);
+	const formatCurrency = (val) =>
+		new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(val);
 
 	const handleSubmit = async (e) => {
 		e.preventDefault();
@@ -26,17 +45,18 @@ export const GoalList = ({ goals, onUpdate }) => {
 			setIsAdding(false);
 			onUpdate();
 		} catch (error) {
-			console.error("Failed to create goal", error);
+			console.error('Failed to create goal', error);
 		}
 	};
 
-	const handleDeposit = async (id, currentVal) => {
-		const newVal = prompt("Введите новую текущую сумму накоплений:", currentVal);
-		if (newVal !== null && !isNaN(parseFloat(newVal))) {
-			try {
-				await goalService.deposit(id, newVal);
-				onUpdate();
-			} catch (e) { console.error(e); }
+	const handleDeposit = async () => {
+		const { id, currentAmount } = depositDialog;
+		try {
+			await goalService.deposit(id, currentAmount);
+			onUpdate();
+			setDepositDialog({ open: false, id: null, currentAmount: 0 });
+		} catch (e) {
+			console.error(e);
 		}
 	};
 
@@ -45,100 +65,136 @@ export const GoalList = ({ goals, onUpdate }) => {
 			try {
 				await goalService.delete(id);
 				onUpdate();
-			} catch (e) { console.error(e); }
+			} catch (e) {
+				console.error(e);
+			}
 		}
 	};
 
 	return (
-		<div className="goals-card">
-			<div className="goals-card__header">
-				<h3 className="goals-card__title">
-					<Target size={20} />
-					<span>Финансовые цели</span>
-				</h3>
-				<button
-					onClick={() => setIsAdding(!isAdding)}
-					className={`goals-card__add-btn ${isAdding ? 'goals-card__add-btn--active' : ''}`}
-				>
-					{isAdding ? <X size={20} /> : <Plus size={20} />}
-				</button>
-			</div>
+		<Paper sx={{ p: 3 }}>
+			<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+				<Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+					<TargetIcon color="primary" />
+					Финансовые цели
+				</Typography>
+				<IconButton onClick={() => setIsAdding(!isAdding)} size="small">
+					{isAdding ? <XIcon /> : <PlusIcon />}
+				</IconButton>
+			</Box>
 
 			{isAdding && (
-				<form onSubmit={handleSubmit} className="goal-form">
-					<input
-						type="text"
-						placeholder="На что копим? (например, Машина)"
-						className="goal-form__input"
-						value={newGoal.name}
-						onChange={e => setNewGoal({ ...newGoal, name: e.target.value })}
+				<Box component="form" onSubmit={handleSubmit} sx={{ mb: 3, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+					<TextField
+						label="Название"
+						size="small"
+						fullWidth
 						required
+						value={newGoal.name}
+						onChange={(e) => setNewGoal({ ...newGoal, name: e.target.value })}
+						sx={{ mb: 2 }}
 					/>
-					<div className="goal-form__row">
-						<input
+					<Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+						<TextField
+							label="Цель (₽)"
 							type="number"
-							placeholder="Цель (₽)"
-							className="goal-form__input"
-							value={newGoal.target_amount}
-							onChange={e => setNewGoal({ ...newGoal, target_amount: e.target.value })}
+							size="small"
+							fullWidth
 							required
+							value={newGoal.target_amount}
+							onChange={(e) => setNewGoal({ ...newGoal, target_amount: e.target.value })}
 						/>
-						<input
+						<TextField
+							label="Уже есть (₽)"
 							type="number"
-							placeholder="Уже есть (₽)"
-							className="goal-form__input"
+							size="small"
+							fullWidth
 							value={newGoal.current_amount}
-							onChange={e => setNewGoal({ ...newGoal, current_amount: e.target.value })}
+							onChange={(e) => setNewGoal({ ...newGoal, current_amount: e.target.value })}
 						/>
-					</div>
-					<button type="submit" className="goal-form__submit">
-						Создать цель
-					</button>
-				</form>
+					</Box>
+					<Button type="submit" variant="contained" fullWidth>
+						Создать
+					</Button>
+				</Box>
 			)}
 
-			<div className="goals-list">
+			<Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 				{goals.length === 0 && !isAdding && (
-					<div className="goals-list__empty">Пока целей нет. Самое время поставить первую!</div>
+					<Typography color="text.secondary" align="center" py={2}>
+						Нет активных целей
+					</Typography>
 				)}
 
 				{goals.map((g) => (
-					<div key={g.id} className="goal-item">
-						<div className="goal-item__header">
-							<div className="goal-item__info">
-								<h4 className="goal-item__name">{g.name}</h4>
-								<p className="goal-item__amounts">
-									{formatCurrency(g.current_amount)} <span>из</span> {formatCurrency(g.target_amount)}
-								</p>
-							</div>
-							<div className="goal-item__percentage">{g.percentage}%</div>
-						</div>
+					<Paper
+						key={g.id}
+						variant="outlined"
+						sx={{ p: 2, position: 'relative', '&:hover .actions': { opacity: 1 } }}
+					>
+						<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+							<Box>
+								<Typography variant="subtitle2">{g.name}</Typography>
+								<Typography variant="caption" color="text.secondary">
+									{formatCurrency(g.current_amount)} из {formatCurrency(g.target_amount)}
+								</Typography>
+							</Box>
+							<Typography variant="body2" fontWeight="bold" color="primary">
+								{g.percentage}%
+							</Typography>
+						</Box>
 
-						<div className="goal-item__progress-bg">
-							<div
-								className="goal-item__progress-fill"
-								style={{ width: `${Math.min(g.percentage, 100)}%` }}
-							/>
-						</div>
+						<LinearProgress
+							variant="determinate"
+							value={Math.min(g.percentage, 100)}
+							sx={{ height: 8, borderRadius: 4, mb: 2 }}
+						/>
 
-						<div className="goal-item__actions">
-							<button
-								onClick={() => handleDeposit(g.id, g.current_amount)}
-								className="goal-item__btn goal-item__btn--edit"
+						<Box
+							className="actions"
+							sx={{
+								position: 'absolute',
+								top: 8,
+								right: 8,
+								opacity: 0,
+								transition: 'opacity 0.2s',
+								display: 'flex',
+								gap: 1,
+							}}
+						>
+							<IconButton
+								size="small"
+								onClick={() => setDepositDialog({ open: true, id: g.id, currentAmount: g.current_amount })}
 							>
-								<Edit3 size={14} />
-								<span>Изменить сумму</span>
-							</button>
-							<button
-								onClick={() => handleDelete(g.id)}
-								className="goal-item__btn goal-item__btn--delete"
-							>
-								<Trash2 size={14} />
-							</button>
-						</div>
-					</div>
+								<EditIcon fontSize="small" />
+							</IconButton>
+							<IconButton size="small" onClick={() => handleDelete(g.id)} color="error">
+								<TrashIcon fontSize="small" />
+							</IconButton>
+						</Box>
+					</Paper>
 				))}
-			</div>
-		</div>
+			</Box>
+
+			{/* Deposit Dialog */}
+			<Dialog open={depositDialog.open} onClose={() => setDepositDialog({ open: false, id: null, currentAmount: 0 })}>
+				<DialogTitle>Изменить сумму накоплений</DialogTitle>
+				<DialogContent>
+					<TextField
+						autoFocus
+						margin="dense"
+						label="Текущая сумма (₽)"
+						type="number"
+						fullWidth
+						value={depositDialog.currentAmount}
+						onChange={(e) => setDepositDialog({ ...depositDialog, currentAmount: e.target.value })}
+					/>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setDepositDialog({ open: false, id: null, currentAmount: 0 })}>Отмена</Button>
+					<Button onClick={handleDeposit} variant="contained">Сохранить</Button>
+				</DialogActions>
+			</Dialog>
+		</Paper>
 	);
 };

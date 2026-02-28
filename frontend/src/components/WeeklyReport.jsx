@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, AlertCircle, Target, Loader2 } from 'lucide-react';
+import {
+	Paper,
+	Typography,
+	Box,
+	Grid,
+	Alert,
+	CircularProgress,
+} from '@mui/material';
+import {
+	CalendarMonth as CalendarIcon,
+	TrendingUp as TrendingUpIcon,
+	Warning as AlertCircleIcon,
+	EmojiEvents as TargetIcon,
+} from '@mui/icons-material';
 
 export const WeeklyReport = () => {
 	const [report, setReport] = useState(null);
@@ -22,89 +35,99 @@ export const WeeklyReport = () => {
 	};
 
 	if (loading) return (
-		<div className="report-loading">
-			<Loader2 size={32} className="animate-spin" />
-			<span>Формируем ваш отчёт...</span>
-		</div>
+		<Box sx={{ textAlign: 'center', py: 8 }}>
+			<CircularProgress />
+		</Box>
 	);
-
 	if (!report) return null;
 
 	return (
-		<div className="weekly-report">
-			<header className="weekly-report__header">
-				<div className="weekly-report__title-box">
-					<div className="weekly-report__icon-main">
-						<Calendar size={24} />
-					</div>
-					<div>
-						<h2 className="weekly-report__title">Еженедельный отчёт</h2>
-						<span className="weekly-report__period">{report.period}</span>
-					</div>
-				</div>
-			</header>
+		<Paper sx={{ p: 3, mb: 4 }}>
+			<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+				<Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+					<CalendarIcon color="primary" />
+					Еженедельный отчёт
+				</Typography>
+				<Typography variant="body2" color="text.secondary">
+					{report.period}
+				</Typography>
+			</Box>
 
-			{/* Краткая статистика */}
-			<div className="weekly-report__stats-grid">
-				<div className="report-stat report-stat--expense">
-					<p className="report-stat__label">Расходы</p>
-					<p className="report-stat__value">{report.stats.expenses.toLocaleString()} ₽</p>
-				</div>
-				<div className="report-stat report-stat--income">
-					<p className="report-stat__label">Доходы</p>
-					<p className="report-stat__value">{report.stats.income.toLocaleString()} ₽</p>
-				</div>
-				<div className="report-stat report-stat--balance">
-					<p className="report-stat__label">Баланс</p>
-					<p className="report-stat__value">{report.stats.balance.toLocaleString()} ₽</p>
-				</div>
-			</div>
+			{/* Stats */}
+			<Grid container spacing={2} sx={{ mb: 3 }}>
+				<Grid item xs={4}>
+					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'primary.light' }}>
+						<Typography variant="caption" color="primary.contrastText">Расходы</Typography>
+						<Typography variant="h5" fontWeight="bold" color="primary.contrastText">
+							{report.stats.expenses.toLocaleString()} ₽
+						</Typography>
+					</Paper>
+				</Grid>
+				<Grid item xs={4}>
+					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'success.light' }}>
+						<Typography variant="caption" color="success.contrastText">Доходы</Typography>
+						<Typography variant="h5" fontWeight="bold" color="success.contrastText">
+							{report.stats.income.toLocaleString()} ₽
+						</Typography>
+					</Paper>
+				</Grid>
+				<Grid item xs={4}>
+					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'secondary.light' }}>
+						<Typography variant="caption" color="secondary.contrastText">Баланс</Typography>
+						<Typography variant="h5" fontWeight="bold" color="secondary.contrastText">
+							{report.stats.balance.toLocaleString()} ₽
+						</Typography>
+					</Paper>
+				</Grid>
+			</Grid>
 
-			{/* Сравнение */}
-			<div className="weekly-report__comparison">
-				<div className="weekly-report__section-header">
-					<TrendingUp size={18} />
-					<span className="weekly-report__section-title">Динамика к прошлой неделе</span>
-				</div>
-				<div className={`weekly-report__change-value ${report.comparison.change_percent > 0 ? 'weekly-report__change-value--negative' : 'weekly-report__change-value--positive'
-					}`}>
-					{report.comparison.change_percent > 0 ? 'Увеличение трат на' : 'Снижение трат на'}
-					<strong> {Math.abs(report.comparison.change_percent)}%</strong>
-				</div>
-			</div>
+			{/* Comparison */}
+			<Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+				<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+					<TrendingUpIcon color="action" />
+					<Typography variant="body2" fontWeight="medium">Сравнение с прошлой неделей</Typography>
+				</Box>
+				<Typography
+					variant="h6"
+					fontWeight="bold"
+					color={report.comparison.change_percent > 0 ? 'error.main' : 'success.main'}
+				>
+					{report.comparison.change_percent > 0 ? '+' : ''}
+					{report.comparison.change_percent}%
+				</Typography>
+			</Paper>
 
-			{/* Проблемы (Issues) */}
+			{/* Issues */}
 			{report.issues.length > 0 && (
-				<div className="weekly-report__section weekly-report__section--issues">
-					<div className="weekly-report__section-header">
-						<AlertCircle size={18} />
-						<span className="weekly-report__section-title">Требует внимания</span>
-					</div>
-					<div className="weekly-report__list">
+				<Box sx={{ mb: 3 }}>
+					<Typography variant="body2" fontWeight="medium" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+						<AlertCircleIcon color="warning" />
+						Требует внимания
+					</Typography>
+					<Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
 						{report.issues.map((issue, idx) => (
-							<div key={idx} className="weekly-report__issue-item">
+							<Alert key={idx} severity="warning" sx={{ py: 0 }}>
 								{issue}
-							</div>
+							</Alert>
 						))}
-					</div>
-				</div>
+					</Box>
+				</Box>
 			)}
 
-			{/* Рекомендации AI */}
-			<div className="weekly-report__section weekly-report__section--recommendations">
-				<div className="weekly-report__section-header">
-					<Target size={18} />
-					<span className="weekly-report__section-title">AI Рекомендации</span>
-				</div>
-				<div className="weekly-report__list">
+			{/* Recommendations */}
+			<Box>
+				<Typography variant="body2" fontWeight="medium" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+					<TargetIcon color="primary" />
+					Рекомендации AI
+				</Typography>
+				<Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
 					{report.recommendations.map((rec, idx) => (
-						<div key={idx} className="weekly-report__rec-item">
-							<span className="weekly-report__rec-bullet">•</span>
+						<Alert key={idx} severity="info" sx={{ py: 0 }}>
 							{rec}
-						</div>
+						</Alert>
 					))}
-				</div>
-			</div>
-		</div>
+				</Box>
+			</Box>
+		</Paper>
 	);
 };

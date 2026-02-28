@@ -1,26 +1,35 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, AlertTriangle } from 'lucide-react';
+import {
+	Paper,
+	Typography,
+	Box,
+	IconButton,
+	Button,
+	TextField,
+	MenuItem,
+	LinearProgress,
+	Alert,
+} from '@mui/material';
+import { Add, Delete } from '@mui/icons-material';
 import { budgetService } from '../services/api';
 
-export const BudgetList = ({ budgets, categories, dateRange, onUpdate }) => {
+export const BudgetList = ({ budgets, categories, onUpdate }) => {
 	const [isAdding, setIsAdding] = useState(false);
 	const [newBudget, setNewBudget] = useState({ categoryId: '', amount: '' });
 
-	const formatCurrency = (val) => new Intl.NumberFormat('ru-RU', {
-		style: 'currency', currency: 'RUB', maximumFractionDigits: 0
-	}).format(val);
+	const formatCurrency = (val) =>
+		new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(val);
 
 	const handleSubmit = async (e) => {
 		e.preventDefault();
 		if (!newBudget.categoryId || !newBudget.amount) return;
-
 		try {
 			await budgetService.create(newBudget.categoryId, newBudget.amount);
 			setNewBudget({ categoryId: '', amount: '' });
 			setIsAdding(false);
-			onUpdate(); // Обновляем данные
+			onUpdate();
 		} catch (error) {
-			console.error("Failed to create budget", error);
+			console.error('Failed to create budget', error);
 		}
 	};
 
@@ -30,94 +39,94 @@ export const BudgetList = ({ budgets, categories, dateRange, onUpdate }) => {
 				await budgetService.delete(id);
 				onUpdate();
 			} catch (error) {
-				console.error("Failed to delete budget", error);
+				console.error('Failed to delete budget', error);
 			}
 		}
 	};
 
 	return (
-		<div className="budget-card">
-			<div className="budget-card__header">
-				<h3 className="budget-card__title">Бюджеты</h3>
-				<button
-					onClick={() => setIsAdding(!isAdding)}
-					className={`budget-card__toggle-btn ${isAdding ? 'budget-card__toggle-btn--active' : ''}`}
-				>
-					{isAdding ? <X size={18} /> : <Plus size={18} />}
-				</button>
-			</div>
+		<Paper sx={{ p: 3 }}>
+			<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+				<Typography variant="h6">Бюджеты на месяц</Typography>
+				<IconButton onClick={() => setIsAdding(!isAdding)} size="small">
+					<Add />
+				</IconButton>
+			</Box>
 
 			{isAdding && (
-				<form onSubmit={handleSubmit} className="budget-form">
-					<div className="budget-form__group">
-						<select
-							className="budget-form__select"
-							value={newBudget.categoryId}
-							onChange={(e) => setNewBudget({ ...newBudget, categoryId: e.target.value })}
-							required
-						>
-							<option value="">Категория</option>
-							{categories.map(c => (
-								<option key={c.id} value={c.id}>{c.name}</option>
-							))}
-						</select>
-						<input
-							type="number"
-							placeholder="Лимит (₽)"
-							className="budget-form__input"
-							value={newBudget.amount}
-							onChange={(e) => setNewBudget({ ...newBudget, amount: e.target.value })}
-							required
-						/>
-					</div>
-					<button type="submit" className="budget-form__submit">
-						Установить лимит
-					</button>
-				</form>
+				<Box component="form" onSubmit={handleSubmit} sx={{ mb: 3, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+					<TextField
+						select
+						label="Категория"
+						value={newBudget.categoryId}
+						onChange={(e) => setNewBudget({ ...newBudget, categoryId: e.target.value })}
+						size="small"
+						fullWidth
+						required
+						sx={{ mb: 2 }}
+					>
+						<MenuItem value="">Выберите категорию</MenuItem>
+						{categories.map((c) => (
+							<MenuItem key={c.id} value={c.id}>
+								{c.name}
+							</MenuItem>
+						))}
+					</TextField>
+					<TextField
+						label="Лимит (₽)"
+						type="number"
+						value={newBudget.amount}
+						onChange={(e) => setNewBudget({ ...newBudget, amount: e.target.value })}
+						size="small"
+						fullWidth
+						required
+						sx={{ mb: 2 }}
+					/>
+					<Button type="submit" variant="contained" fullWidth>
+						Сохранить
+					</Button>
+				</Box>
 			)}
 
-			<div className="budget-list">
+			<Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 				{budgets.length === 0 && !isAdding && (
-					<div className="budget-list__empty">Нет активных лимитов</div>
+					<Typography color="text.secondary" align="center" py={2}>
+						Нет активных бюджетов
+					</Typography>
 				)}
 
 				{budgets.map((b) => (
-					<div key={b.id} className="budget-item">
-						<div className="budget-item__info">
-							<span className="budget-item__name">{b.category_name}</span>
-							<span className="budget-item__values">
-								<span className="budget-item__spent">{formatCurrency(b.spent_amount)}</span>
-								<span className="budget-item__separator">/</span>
-								<span className="budget-item__limit">{formatCurrency(b.limit_amount)}</span>
-							</span>
-						</div>
-
-						<div className="budget-item__progress-container">
-							<div
-								className={`budget-item__progress-bar ${b.is_exceeded ? 'budget-item__progress-bar--danger' :
-										b.percentage > 80 ? 'budget-item__progress-bar--warning' : ''
-									}`}
-								style={{ width: `${Math.min(b.percentage, 100)}%` }}
-							/>
-						</div>
-
+					<Box key={b.id} sx={{ position: 'relative', '&:hover .delete-btn': { opacity: 1 } }}>
+						<Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+							<Typography variant="body2" fontWeight="medium">
+								{b.category_name}
+							</Typography>
+							<Typography variant="body2" color="text.secondary">
+								{formatCurrency(b.spent_amount)} / {formatCurrency(b.limit_amount)}
+							</Typography>
+						</Box>
+						<LinearProgress
+							variant="determinate"
+							value={Math.min(b.percentage, 100)}
+							color={b.is_exceeded ? 'error' : b.percentage > 80 ? 'warning' : 'success'}
+							sx={{ height: 8, borderRadius: 4 }}
+						/>
 						{b.is_exceeded && (
-							<div className="budget-item__alert">
-								<AlertTriangle size={12} />
-								<span>Превышено на {formatCurrency(b.spent_amount - b.limit_amount)}</span>
-							</div>
+							<Alert severity="error" sx={{ mt: 1, py: 0, fontSize: '0.75rem' }}>
+								Превышение на {formatCurrency(b.spent_amount - b.limit_amount)}
+							</Alert>
 						)}
-
-						<button
+						<IconButton
+							className="delete-btn"
 							onClick={() => handleDelete(b.id)}
-							className="budget-item__delete"
-							aria-label="Удалить"
+							size="small"
+							sx={{ position: 'absolute', top: 0, right: -24, opacity: 0, transition: 'opacity 0.2s' }}
 						>
-							<Trash2 size={14} />
-						</button>
-					</div>
+							<Delete fontSize="small" />
+						</IconButton>
+					</Box>
 				))}
-			</div>
-		</div>
+			</Box>
+		</Paper>
 	);
 };

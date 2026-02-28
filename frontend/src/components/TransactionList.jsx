@@ -1,23 +1,28 @@
 import React, { useState } from 'react';
-import { Trash2, ShoppingBag, Coffee, Car, Home } from 'lucide-react';
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableContainer,
+	TableHead,
+	TableRow,
+	Paper,
+	IconButton,
+	Select,
+	MenuItem,
+	Chip,
+	Box,
+	Typography,
+} from '@mui/material';
+import { Delete as DeleteIcon } from '@mui/icons-material';
 import { transactionService } from '../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const getCategoryIcon = (name) => {
-	const n = name.toLowerCase();
-	if (n.includes('продукт')) return <ShoppingBag size={14} />;
-	if (n.includes('кафе') || n.includes('ресторан')) return <Coffee size={14} />;
-	if (n.includes('транспорт') || n.includes('taxi')) return <Car size={14} />;
-	if (n.includes('дом') || n.includes('жкх')) return <Home size={14} />;
-	return <div className="w-2 h-2 rounded-full bg-current" />;
-};
 
 export const TransactionList = ({ transactions = [], categories = [], onTransactionUpdate }) => {
 	const [editingId, setEditingId] = useState(null);
 
-	const formatCurrency = (amount) => new Intl.NumberFormat('ru-RU', {
-		style: 'currency', currency: 'RUB', maximumFractionDigits: 2
-	}).format(amount);
+	const formatCurrency = (amount) =>
+		new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(amount);
 
 	const handleDelete = async (id) => {
 		if (window.confirm('Удалить?')) {
@@ -35,80 +40,83 @@ export const TransactionList = ({ transactions = [], categories = [], onTransact
 	if (!transactions.length) return null;
 
 	return (
-		<div className="transactions-table-container">
-			<table className="transactions-table">
-				<thead className="transactions-table__head">
-					<tr>
-						<th className="transactions-table__th">Дата</th>
-						<th className="transactions-table__th">Категория</th>
-						<th className="transactions-table__th">Описание</th>
-						<th className="transactions-table__th transactions-table__th--right">Сумма</th>
-						<th className="transactions-table__th"></th>
-					</tr>
-				</thead>
-				<tbody className="transactions-table__body">
+		<TableContainer component={Paper} variant="outlined">
+			<Table size="small">
+				<TableHead sx={{ bgcolor: 'action.hover' }}>
+					<TableRow>
+						<TableCell>Дата</TableCell>
+						<TableCell>Категория</TableCell>
+						<TableCell>Описание</TableCell>
+						<TableCell align="right">Сумма</TableCell>
+						<TableCell />
+					</TableRow>
+				</TableHead>
+				<TableBody>
 					<AnimatePresence>
 						{transactions.map((t) => (
 							<motion.tr
 								key={t.id}
-								initial={{ opacity: 0, y: 4 }}
-								animate={{ opacity: 1, y: 0 }}
-								exit={{ opacity: 0, x: -20 }}
-								className="transactions-table__row"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								component={TableRow}
+								sx={{ '&:hover': { bgcolor: 'action.hover' } }}
 							>
-								<td className="transactions-table__td transactions-table__td--date">
+								<TableCell>
 									{new Date(t.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
-								</td>
-
-								<td className="transactions-table__td">
+								</TableCell>
+								<TableCell>
 									{editingId === t.id ? (
-										<select
-											className="category-select"
-											autoFocus
-											defaultValue={t.category?.id || ""}
+										<Select
+											size="small"
+											value={t.category?.id || ''}
 											onChange={(e) => handleCategoryChange(t.id, e.target.value)}
-											onBlur={() => setEditingId(null)}
+											onClose={() => setEditingId(null)}
+											autoFocus
 										>
-											<option value="" disabled>Выбрать...</option>
-											{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-										</select>
+											<MenuItem value="" disabled>Выбрать...</MenuItem>
+											{categories.map((c) => (
+												<MenuItem key={c.id} value={c.id}>
+													{c.name}
+												</MenuItem>
+											))}
+										</Select>
 									) : (
-										<div
+										<Chip
+											label={t.category ? t.category.name : 'Без категории'}
+											size="small"
+											color={t.category ? 'primary' : 'default'}
+											variant="outlined"
 											onClick={() => setEditingId(t.id)}
-											className={`category-tag ${t.category ? 'category-tag--active' : 'category-tag--empty'}`}
-										>
-											<span className="category-tag__icon">
-												{t.category ? getCategoryIcon(t.category.name) : <Plus size={12} />}
-											</span>
-											<span className="category-tag__name">
-												{t.category ? t.category.name : 'Категория'}
-											</span>
-										</div>
+											sx={{ cursor: 'pointer' }}
+										/>
 									)}
-								</td>
-
-								<td className="transactions-table__td transactions-table__td--desc" title={t.description}>
-									{t.description}
-								</td>
-
-								<td className={`transactions-table__td transactions-table__td--amount ${t.is_income ? 'transactions-table__td--income' : ''}`}>
-									{t.is_income ? '+' : ''}{formatCurrency(t.amount)}
-								</td>
-
-								<td className="transactions-table__td transactions-table__td--actions">
-									<button
-										onClick={() => handleDelete(t.id)}
-										className="action-btn action-btn--delete"
-										aria-label="Удалить"
+								</TableCell>
+								<TableCell>
+									<Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
+										{t.description}
+									</Typography>
+								</TableCell>
+								<TableCell align="right">
+									<Typography
+										variant="body2"
+										fontWeight="bold"
+										color={t.is_income ? 'success.main' : 'text.primary'}
 									>
-										<Trash2 size={16} />
-									</button>
-								</td>
+										{t.is_income ? '+' : ''}
+										{formatCurrency(t.amount)}
+									</Typography>
+								</TableCell>
+								<TableCell align="right">
+									<IconButton size="small" onClick={() => handleDelete(t.id)} color="error">
+										<DeleteIcon fontSize="small" />
+									</IconButton>
+								</TableCell>
 							</motion.tr>
 						))}
 					</AnimatePresence>
-				</tbody>
-			</table>
-		</div>
+				</TableBody>
+			</Table>
+		</TableContainer>
 	);
 };
