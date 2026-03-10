@@ -1,7 +1,7 @@
 import httpx
 import json
 from typing import List, Dict, Optional, AsyncIterator
-from app.core.config import settings
+from backend.app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)

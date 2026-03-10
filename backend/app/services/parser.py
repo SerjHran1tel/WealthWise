@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from decimal import Decimal, InvalidOperation
 from pypdf import PdfReader
-from app.core.config import settings
+from backend.app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)

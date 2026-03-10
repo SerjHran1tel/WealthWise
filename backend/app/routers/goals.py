@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-from app.database import get_db
-from app.models import Goal
-from app.schemas import GoalCreate, GoalResponse, GoalUpdate
+from backend.app.database import get_db
+from backend.app.models import Goal
+from backend.app.schemas import GoalCreate, GoalResponse, GoalUpdate
 
 router = APIRouter(prefix="/api/goals", tags=["goals"])
 

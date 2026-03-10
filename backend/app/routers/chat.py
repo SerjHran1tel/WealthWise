@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from app.database import get_db
-from app.services.ollama_client import ollama_client
-from app.core.auth import get_current_user
+from backend.app.database import get_db
+from backend.app.services.ollama_client import ollama_client
+from backend.app.core.auth import get_current_user
 
 # Import advanced chat agent
 try:
@@ -13,7 +13,7 @@ try:
     USE_ADVANCED = True
 except ImportError:
     # Fallback to basic agent if advanced not available
-    from app.agents.chat_agent import chat_agent
+    from backend.app.agents.chat_agent import chat_agent
     USE_ADVANCED = False
 
 import logging

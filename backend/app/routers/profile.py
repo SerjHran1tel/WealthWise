@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Dict, Optional
 
-from app.database import get_db
-from app.agents.user_profiler import user_profiler
-from app.core.auth import get_current_user
+from backend.app.database import get_db
+from backend.app.agents.user_profiler import user_profiler
+from backend.app.core.auth import get_current_user
 import logging
 
 logger = logging.getLogger(__name__)

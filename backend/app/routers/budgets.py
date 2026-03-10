@@ -4,9 +4,9 @@ from sqlalchemy import func
 from typing import List
 from datetime import date, datetime, time
 
-from app.database import get_db
-from app.models import Budget, Transaction, Category
-from app.schemas import BudgetCreate, BudgetResponse, BudgetStatus
+from backend.app.database import get_db
+from backend.app.models import Budget, Transaction, Category
+from backend.app.schemas import BudgetCreate, BudgetResponse, BudgetStatus
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 

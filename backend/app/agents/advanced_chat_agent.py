@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
-from app.models import Transaction, Category, Budget, Goal, Insight
-from app.services.ollama_client import ollama_client, OllamaError
-from app.agents.user_profiler import user_profiler
+from backend.app.models import Transaction, Category, Budget, Goal, Insight
+from backend.app.services.ollama_client import ollama_client, OllamaError
+from backend.app.agents.user_profiler import user_profiler
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import List, Dict, Optional

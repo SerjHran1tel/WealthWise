@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.models import Category, Transaction
-from app.services.ollama_client import ollama_client
+from backend.app.models import Category, Transaction
+from backend.app.services.ollama_client import ollama_client
 from typing import Optional, List, Dict
 import logging
 import json

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
-from app.models import Transaction, Budget, Insight
+from backend.app.models import Transaction, Budget, Insight
 
 
 class AnalyticsAgent:

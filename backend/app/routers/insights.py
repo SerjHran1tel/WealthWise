@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
 
-from app.database import get_db
-from app.models import Insight
-from app.schemas import InsightResponse
-from app.core.auth import get_current_user
+from backend.app.database import get_db
+from backend.app.models import Insight
+from backend.app.schemas import InsightResponse
+from backend.app.core.auth import get_current_user
 
 # Import the new advanced agents
-from app.agents.predictive_analytics import predictive_analytics_agent
+from backend.app.agents.predictive_analytics import predictive_analytics_agent
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 

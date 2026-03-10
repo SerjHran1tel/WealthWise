@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from app.core.config import settings
+from backend.app.core.config import settings
 
 # Настройка SQLite
 engine = create_engine(

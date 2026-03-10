@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 from datetime import datetime, timedelta
-from app.models import Transaction, Budget, Goal, Insight, Category
+from backend.app.models import Transaction, Budget, Goal, Insight, Category
 from decimal import Decimal
 from typing import Dict, List, Tuple
 import logging

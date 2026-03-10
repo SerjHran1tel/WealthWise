@@ -113,7 +113,7 @@ class GoalResponse(GoalCreate):
 # --- Pagination (ДОБАВЛЕНО) ---
 class PaginationParams(BaseModel):
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=50, ge=1, le=200)
+    page_size: int = Field(default=500, ge=1, le=501)
 
     @property
     def skip(self) -> int:

@@ -1,8 +1,8 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from app.database import SessionLocal
-from app.agents.weekly_report_agent import weekly_report_agent
-from app.agents.predictive_analytics import predictive_analytics_agent
+from backend.app.database import SessionLocal
+from backend.app.agents.weekly_report_agent import weekly_report_agent
+from backend.app.agents.predictive_analytics import predictive_analytics_agent
 import logging
 import asyncio
 

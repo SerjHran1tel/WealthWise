@@ -5,9 +5,9 @@ from fastapi.responses import FileResponse
 import uvicorn
 import logging
 
-from app.database import engine, Base
-from app.routers import transactions, categories, budgets, goals, insights, chat, reports, profile
-from app.services.scheduler import start_scheduler, stop_scheduler
+from  backend.app.database import engine, Base
+from backend.app.routers import transactions, categories, budgets, goals, insights, chat, reports, profile
+from backend.app.services.scheduler import start_scheduler, stop_scheduler
 
 # Logging setup
 logging.basicConfig(
@@ -57,8 +57,8 @@ async def startup_event():
     logger.info("🚀 Starting WealthWise AI v2.0 - Advanced Financial Assistant")
 
     # Initialize default categories if needed
-    from app.database import SessionLocal
-    from app.models import Category
+    from backend.app.database import SessionLocal
+    from backend.app.models import Category
 
     db = SessionLocal()
     try:
@@ -154,7 +154,7 @@ async def root():
 @app.get("/health")
 async def health_check():
     """API health check"""
-    from app.services.ollama_client import ollama_client
+    from backend.app.services.ollama_client import ollama_client
 
     try:
         ollama_available = await ollama_client.check_health()
@@ -178,7 +178,7 @@ async def health_check():
 
 if __name__ == "__main__":
     uvicorn.run(
-        "app.main:app",
+        "backend.app.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
