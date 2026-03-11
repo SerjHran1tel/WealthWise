@@ -43,7 +43,6 @@ export const categoryService = {
 		return response.data;
 	},
 };
-
 export const budgetService = {
 	getStatus: async (startDate, endDate) => {
 		const response = await api.get('/budgets/status', {
@@ -51,7 +50,7 @@ export const budgetService = {
 		});
 		return response.data;
 	},
-	create: async (categoryId, amount) => {
+	create: async (categoryId, amount) => {q
 		const response = await api.post('/budgets/', {
 			category_id: categoryId,
 			amount: parseFloat(amount)
