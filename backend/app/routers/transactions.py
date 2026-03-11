@@ -5,16 +5,16 @@ from typing import Optional
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from app.database import get_db
-from app.models import Transaction, Category
-from app.schemas import (
+from backend.app.database import get_db
+from backend.app.models import Transaction, Category
+from backend.app.schemas import (
     TransactionResponse, UploadResponse, TransactionUpdate,
     PaginationParams
 )
-from app.services.parser import parse_csv, parse_pdf
-from app.agents.classifier import classifier
-from app.core.config import settings
-from app.core.auth import get_current_user
+from backend.app.services.parser import parse_csv, parse_pdf
+from backend.app.agents.classifier import classifier
+from backend.app.core.config import settings
+from backend.app.core.auth import get_current_user
 import logging
 
 logger = logging.getLogger(__name__)

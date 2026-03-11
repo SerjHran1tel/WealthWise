@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 from datetime import datetime, timedelta
-from app.models import Transaction, Category, Insight
+from backend.app.models import Transaction, Category, Insight
 
 
 class ForecastAgent:

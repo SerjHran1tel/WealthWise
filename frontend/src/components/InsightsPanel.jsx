@@ -1,53 +1,61 @@
 import React from 'react';
-import { AlertTriangle, TrendingUp, Info, Zap, CalendarClock } from 'lucide-react';
+import {
+	Paper,
+	Typography,
+	Box,
+	Alert,
+	AlertTitle,
+} from '@mui/material';
+import {
+	Warning as WarningIcon,
+	TrendingUp as TrendingUpIcon,
+	Info as InfoIcon,
+	Bolt as ZapIcon,
+	CalendarToday as CalendarClockIcon,
+} from '@mui/icons-material';
 
 export const InsightsPanel = ({ insights }) => {
-  if (!insights || insights.length === 0) return null;
+	if (!insights || insights.length === 0) return null;
 
-  const getIcon = (type) => {
-    switch (type) {
-      case 'anomaly': return <AlertTriangle className="text-rose-500" size={20} />;
-      case 'warning': return <TrendingUp className="text-orange-500" size={20} />;
-      case 'recommendation': return <Zap className="text-yellow-500" size={20} />;
-      case 'prediction': return <CalendarClock className="text-purple-500" size={20} />; // <-- Иконка прогноза
-      default: return <Info className="text-blue-500" size={20} />;
-    }
-  };
+	const getIcon = (type) => {
+		switch (type) {
+			case 'anomaly': return <WarningIcon color="error" />;
+			case 'warning': return <TrendingUpIcon color="warning" />;
+			case 'recommendation': return <ZapIcon color="warning" />;
+			case 'prediction': return <CalendarClockIcon color="secondary" />;
+			default: return <InfoIcon color="info" />;
+		}
+	};
 
-  const getStyle = (type) => {
-    switch (type) {
-      case 'anomaly': return 'bg-rose-50 border-rose-100 text-rose-900';
-      case 'warning': return 'bg-orange-50 border-orange-100 text-orange-900';
-      case 'recommendation': return 'bg-yellow-50 border-yellow-100 text-yellow-900';
-      case 'prediction': return 'bg-purple-50 border-purple-100 text-purple-900'; // <-- Стиль прогноза
-      default: return 'bg-blue-50 border-blue-100 text-blue-900';
-    }
-  };
+	const getSeverity = (type) => {
+		switch (type) {
+			case 'anomaly': return 'error';
+			case 'warning': return 'warning';
+			case 'recommendation': return 'warning';
+			case 'prediction': return 'info';
+			default: return 'info';
+		}
+	};
 
-  return (
-    <div className="mb-8">
-      <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-        <Zap size={20} className="text-yellow-500 fill-current" />
-        AI Аналитика и Прогнозы
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {insights.map((insight) => (
-          <div
-            key={insight.id}
-            className={`p-4 rounded-2xl border ${getStyle(insight.type)} transition-all hover:shadow-md`}
-          >
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex-shrink-0">
-                {getIcon(insight.type)}
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm">{insight.title}</h3>
-                <p className="text-sm opacity-90 mt-1 leading-relaxed">{insight.description}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+	return (
+		<Box sx={{ mb: 4 }}>
+			<Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+				<ZapIcon color="warning" />
+				AI Аналитика и Прогнозы
+			</Typography>
+			<Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+				{insights.map((insight) => (
+					<Alert
+						key={insight.id}
+						severity={getSeverity(insight.type)}
+						icon={getIcon(insight.type)}
+						sx={{ borderRadius: 2 }}
+					>
+						<AlertTitle>{insight.title}</AlertTitle>
+						<Typography variant="body2">{insight.description}</Typography>
+					</Alert>
+				))}
+			</Box>
+		</Box>
+	);
 };

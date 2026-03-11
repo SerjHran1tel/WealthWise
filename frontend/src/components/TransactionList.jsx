@@ -1,113 +1,133 @@
 import React, { useState } from 'react';
-import { Trash2, ShoppingBag, Coffee, Car, Home } from 'lucide-react';
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableContainer,
+	TableHead,
+	TableRow,
+	Paper,
+	IconButton,
+	Select,
+	MenuItem,
+	Chip,
+	Box,
+	Typography,
+} from '@mui/material';
+import { Delete as DeleteIcon } from '@mui/icons-material';
 import { transactionService } from '../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const getCategoryIcon = (name) => {
-  const n = name.toLowerCase();
-  if (n.includes('продукт')) return <ShoppingBag size={14} />;
-  if (n.includes('кафе') || n.includes('ресторан')) return <Coffee size={14} />;
-  if (n.includes('транспорт') || n.includes('taxi')) return <Car size={14} />;
-  if (n.includes('дом') || n.includes('жкх')) return <Home size={14} />;
-  return <div className="w-2 h-2 rounded-full bg-current" />;
-};
+import { parseISO, format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 export const TransactionList = ({ transactions = [], categories = [], onTransactionUpdate }) => {
-  const [editingId, setEditingId] = useState(null);
+	const [editingId, setEditingId] = useState(null);
 
-  const formatCurrency = (amount) => new Intl.NumberFormat('ru-RU', {
-    style: 'currency', currency: 'RUB', maximumFractionDigits: 2
-  }).format(amount);
+	const formatCurrency = (amount) =>
+		new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(amount);
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Удалить?')) {
-      await transactionService.delete(id);
-      onTransactionUpdate();
-    }
-  };
+	const handleDelete = async (id) => {
+		if (!window.confirm('Удалить?')) return;
+		try {
+			await transactionService.delete(id);
+			onTransactionUpdate();
+		} catch (error) {
+			console.error('Delete error:', error);
+			alert('Не удалось удалить транзакцию');
+		}
+	};
 
-  const handleCategoryChange = async (transactionId, newCategoryId) => {
-    await transactionService.update(transactionId, { category_id: newCategoryId });
-    onTransactionUpdate();
-    setEditingId(null);
-  };
+	const handleCategoryChange = async (transactionId, newCategoryId) => {
+		try {
+			await transactionService.update(transactionId, { category_id: newCategoryId });
+			onTransactionUpdate();
+			setEditingId(null);
+		} catch (error) {
+			console.error('Update error:', error);
+			alert('Не удалось обновить категорию');
+		}
+	};
 
-  if (!transactions.length) return null;
+	if (!transactions.length) return null;
 
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm border-collapse">
-        <thead className="bg-slate-50 text-slate-500 font-medium">
-          <tr>
-            <th className="px-6 py-4 rounded-tl-lg">Дата</th>
-            <th className="px-6 py-4">Категория</th>
-            <th className="px-6 py-4">Описание</th>
-            <th className="px-6 py-4 text-right">Сумма</th>
-            <th className="px-6 py-4 rounded-tr-lg"></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          <AnimatePresence>
-            {transactions.map((t) => (
-              <motion.tr
-                key={t.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="hover:bg-slate-50/80 transition-colors group"
-              >
-                <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                  {new Date(t.date).toLocaleDateString('ru-RU', {day: 'numeric', month: 'short'})}
-                </td>
-
-                <td className="px-6 py-4">
-                  {editingId === t.id ? (
-                    <select
-                      className="border border-blue-300 rounded-lg px-2 py-1.5 text-xs w-full focus:ring-2 focus:ring-blue-100 outline-none bg-white shadow-sm"
-                      autoFocus
-                      defaultValue={t.category?.id || ""}
-                      onChange={(e) => handleCategoryChange(t.id, e.target.value)}
-                      onBlur={() => setEditingId(null)}
-                    >
-                      <option value="" disabled>Выбрать...</option>
-                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  ) : (
-                    <div
-                      onClick={() => setEditingId(t.id)}
-                      className={`cursor-pointer inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-medium transition-all hover:scale-105 active:scale-95
-                        ${t.category
-                          ? 'bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'}`}
-                    >
-                      {t.category ? getCategoryIcon(t.category.name) : null}
-                      {t.category ? t.category.name : 'Без категории'}
-                    </div>
-                  )}
-                </td>
-
-                <td className="px-6 py-4 text-slate-700 font-medium max-w-xs truncate" title={t.description}>
-                  {t.description}
-                </td>
-
-                <td className={`px-6 py-4 text-right font-semibold tracking-tight
-                  ${t.is_income ? 'text-emerald-600' : 'text-slate-900'}`}>
-                  {t.is_income ? '+' : ''}{formatCurrency(t.amount)}
-                </td>
-
-                <td className="px-6 py-4 text-right">
-                  <button
-                    onClick={() => handleDelete(t.id)}
-                    className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </motion.tr>
-            ))}
-          </AnimatePresence>
-        </tbody>
-      </table>
-    </div>
-  );
+	return (
+		<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+			<Table size="small" sx={{ minWidth: { xs: 600, sm: '100%' } }}>
+				<TableHead sx={{ bgcolor: 'action.hover' }}>
+					<TableRow>
+						<TableCell>Дата</TableCell>
+						<TableCell>Категория</TableCell>
+						<TableCell>Описание</TableCell>
+						<TableCell align="right">Сумма</TableCell>
+						<TableCell />
+					</TableRow>
+				</TableHead>
+				<TableBody>
+					<AnimatePresence>
+						{transactions.map((t) => (
+							<motion.tr
+								key={t.id}
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								component={TableRow}
+								sx={{ '&:hover': { bgcolor: 'action.hover' } }}
+							>
+								<TableCell>
+									{format(parseISO(t.date), 'd MMM', { locale: ru })}
+								</TableCell>
+								<TableCell>
+									{editingId === t.id ? (
+										<Select
+											size="small"
+											value={t.category?.id || ''}
+											onChange={(e) => handleCategoryChange(t.id, e.target.value)}
+											onClose={() => setEditingId(null)}
+											autoFocus
+										>
+											<MenuItem value="" disabled>Выбрать...</MenuItem>
+											{categories.map((c) => (
+												<MenuItem key={c.id} value={c.id}>
+													{c.name}
+												</MenuItem>
+											))}
+										</Select>
+									) : (
+										<Chip
+											label={t.category ? t.category.name : 'Без категории'}
+											size="small"
+											color={t.category ? 'primary' : 'default'}
+											variant="outlined"
+											onClick={() => setEditingId(t.id)}
+											sx={{ cursor: 'pointer' }}
+										/>
+									)}
+								</TableCell>
+								<TableCell>
+									<Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
+										{t.description}
+									</Typography>
+								</TableCell>
+								<TableCell align="right">
+									<Typography
+										variant="body2"
+										fontWeight="bold"
+										color={t.is_income ? 'success.main' : 'text.primary'}
+									>
+										{t.is_income ? '+' : ''}
+										{formatCurrency(t.amount)}
+									</Typography>
+								</TableCell>
+								<TableCell align="right">
+									<IconButton size="small" onClick={() => handleDelete(t.id)} color="error">
+										<DeleteIcon fontSize="small" />
+									</IconButton>
+								</TableCell>
+							</motion.tr>
+						))}
+					</AnimatePresence>
+				</TableBody>
+			</Table>
+		</TableContainer>
+	);
 };

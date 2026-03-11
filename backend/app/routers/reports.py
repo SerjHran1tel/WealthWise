@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 
-from app.database import get_db
-from app.agents.weekly_report_agent import weekly_report_agent
-from app.services.scheduler import trigger_weekly_report_now, get_scheduler_status
-from app.core.auth import get_current_user
+from backend.app.database import get_db
+from backend.app.agents.weekly_report_agent import weekly_report_agent
+from backend.app.services.scheduler import trigger_weekly_report_now, get_scheduler_status
+from backend.app.core.auth import get_current_user
 import logging
 
 logger = logging.getLogger(__name__)

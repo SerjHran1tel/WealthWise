@@ -21,12 +21,12 @@ class Settings(BaseSettings):
 
     # Ollama настройки
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "qwen2.5:7b"
-    OLLAMA_TIMEOUT: int = 60
+    OLLAMA_MODEL: str = "qwen3:8b"
+    OLLAMA_TIMEOUT: int = 300
 
     # Пагинация
-    DEFAULT_PAGE_SIZE: int = 50
-    MAX_PAGE_SIZE: int = 200
+    DEFAULT_PAGE_SIZE: int = 500
+    MAX_PAGE_SIZE: int = 501
 
     # Лимиты для парсинга
     MAX_UPLOAD_SIZE_MB: int = 10

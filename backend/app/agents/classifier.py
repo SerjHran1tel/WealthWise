@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models import Category, Transaction
+from backend.app.models import Category, Transaction
 
 
 class ClassifierAgent:

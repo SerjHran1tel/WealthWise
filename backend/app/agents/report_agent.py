@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
-from app.models import Transaction, Budget, Goal, Insight, Category
-from app.services.ollama_client import ollama_client
+from backend.app.models import Transaction, Budget, Goal, Insight, Category
+from backend.app.services.ollama_client import ollama_client
 from typing import Dict, List
 import logging
 

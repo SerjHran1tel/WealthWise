@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
-from app.models import Transaction, Budget, Goal, Insight, Category
-from app.services.ollama_client import ollama_client
+from backend.app.models import Transaction, Budget, Goal, Insight, Category
+from backend.app.services.ollama_client import ollama_client
 from typing import Dict, List
 import logging
 
@@ -231,7 +231,7 @@ class WeeklyReportAgent:
 
         try:
             # Получаем персонализированный system prompt
-            from app.agents.user_profiler import user_profiler
+            from backend.app.agents.user_profiler import user_profiler
             system_prompt = user_profiler.get_personalized_system_prompt(db, user_id)
 
             response = await ollama_client.generate(

@@ -1,133 +1,253 @@
 import React, { useState } from 'react';
-import { Plus, Target, Trash2, Edit3, X } from 'lucide-react';
+import {
+	Paper,
+	Typography,
+	Box,
+	IconButton,
+	Button,
+	TextField,
+	LinearProgress,
+	Dialog,
+	DialogTitle,
+	DialogContent,
+	DialogActions,
+	Alert,
+} from '@mui/material';
+import {
+	Add as PlusIcon,
+	EmojiEvents as TargetIcon,
+	Delete as TrashIcon,
+	Edit as EditIcon,
+	Close as XIcon,
+} from '@mui/icons-material';
 import { goalService } from '../services/api';
 
 export const GoalList = ({ goals, onUpdate }) => {
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+	const [isAdding, setIsAdding] = useState(false);
+	const [depositDialog, setDepositDialog] = useState({ open: false, id: null, currentAmount: 0 });
+	const [error, setError] = useState(null);
 
-  const [newGoal, setNewGoal] = useState({
-    name: '', target_amount: '', current_amount: '0', deadline: '', color: '#3B82F6'
-  });
+	const [newGoal, setNewGoal] = useState({
+		name: '',
+		target_amount: '',
+		current_amount: '0',
+		deadline: '',
+		color: '#3B82F6'
+	});
 
-  const formatCurrency = (val) => new Intl.NumberFormat('ru-RU', {
-    style: 'currency', currency: 'RUB', maximumFractionDigits: 0
-  }).format(val);
+	const formatCurrency = (val) =>
+		new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(val);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await goalService.create({
-        ...newGoal,
-        target_amount: parseFloat(newGoal.target_amount),
-        current_amount: parseFloat(newGoal.current_amount)
-      });
-      setNewGoal({ name: '', target_amount: '', current_amount: '0', deadline: '', color: '#3B82F6' });
-      setIsAdding(false);
-      onUpdate();
-    } catch (error) {
-      console.error("Failed to create goal", error);
-    }
-  };
+	const handleSubmit = async (e) => {
+		e.preventDefault();
+		setError(null);
 
-  const handleDeposit = async (id, currentVal) => {
-    const newVal = prompt("Введите новую текущую сумму накоплений:", currentVal);
-    if (newVal !== null && !isNaN(parseFloat(newVal))) {
-      try {
-        await goalService.deposit(id, newVal);
-        onUpdate();
-      } catch (e) { console.error(e); }
-    }
-  };
+		// Валидация
+		if (!newGoal.name.trim()) {
+			setError('Введите название цели');
+			return;
+		}
+		const target = parseFloat(newGoal.target_amount);
+		if (isNaN(target) || target <= 0) {
+			setError('Целевая сумма должна быть положительным числом');
+			return;
+		}
+		const current = parseFloat(newGoal.current_amount) || 0;
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Удалить эту цель?')) {
-      try {
-        await goalService.delete(id);
-        onUpdate();
-      } catch (e) { console.error(e); }
-    }
-  };
+		// Формируем payload, исключая пустые поля
+		const payload = {
+			name: newGoal.name.trim(),
+			target_amount: target,
+			current_amount: current,
+		};
+		if (newGoal.deadline) payload.deadline = newGoal.deadline;
+		// Если бэкенд не требует цвет, можно закомментировать следующую строку
+		payload.color = newGoal.color;
 
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-sm h-full flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-          <Target size={20} className="text-primary" /> Финансовые цели
-        </h3>
-        <button
-          onClick={() => setIsAdding(!isAdding)}
-          className="text-primary hover:bg-blue-50 p-1 rounded transition"
-        >
-          {isAdding ? <X size={20} /> : <Plus size={20} />}
-        </button>
-      </div>
+		try {
+			await goalService.create(payload);
+			setNewGoal({ name: '', target_amount: '', current_amount: '0', deadline: '', color: '#3B82F6' });
+			setIsAdding(false);
+			onUpdate();
+		} catch (error) {
+			console.error('Failed to create goal', error);
+			const serverMessage = error.response?.data?.detail || error.response?.data?.message || 'Ошибка при создании цели';
+			setError(serverMessage);
+		}
+	};
 
-      {isAdding && (
-        <form onSubmit={handleSubmit} className="mb-6 p-3 bg-gray-50 rounded border border-blue-100 space-y-2">
-          <input
-            type="text" placeholder="Название (на машину)" className="w-full border rounded p-2 text-sm"
-            value={newGoal.name} onChange={e => setNewGoal({...newGoal, name: e.target.value})} required
-          />
-          <div className="flex gap-2">
-            <input
-              type="number" placeholder="Цель (₽)" className="w-1/2 border rounded p-2 text-sm"
-              value={newGoal.target_amount} onChange={e => setNewGoal({...newGoal, target_amount: e.target.value})} required
-            />
-            <input
-              type="number" placeholder="Уже есть (₽)" className="w-1/2 border rounded p-2 text-sm"
-              value={newGoal.current_amount} onChange={e => setNewGoal({...newGoal, current_amount: e.target.value})}
-            />
-          </div>
-          <button type="submit" className="w-full bg-primary text-white py-1 rounded text-sm hover:bg-blue-600">
-            Создать
-          </button>
-        </form>
-      )}
+	const handleDeposit = async () => {
+		const { id, currentAmount } = depositDialog;
+		const amount = parseFloat(currentAmount);
+		if (isNaN(amount) || amount < 0) {
+			setError('Сумма должна быть неотрицательным числом');
+			return;
+		}
+		try {
+			await goalService.deposit(id, amount);
+			onUpdate();
+			setDepositDialog({ open: false, id: null, currentAmount: 0 });
+		} catch (e) {
+			console.error(e);
+			setError('Не удалось обновить сумму');
+		}
+	};
 
-      <div className="space-y-4 overflow-y-auto flex-1 pr-2">
-        {goals.length === 0 && !isAdding && (
-          <p className="text-gray-400 text-sm text-center py-4">Нет активных целей</p>
-        )}
+	const handleDelete = async (id) => {
+		if (window.confirm('Удалить эту цель?')) {
+			try {
+				await goalService.delete(id);
+				onUpdate();
+			} catch (e) {
+				console.error(e);
+				setError('Не удалось удалить цель');
+			}
+		}
+	};
 
-        {goals.map((g) => (
-          <div key={g.id} className="border rounded-lg p-3 hover:shadow-md transition group relative">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h4 className="font-medium text-gray-800">{g.name}</h4>
-                <p className="text-xs text-gray-500">
-                  {formatCurrency(g.current_amount)} из {formatCurrency(g.target_amount)}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-sm font-bold text-primary">{g.percentage}%</span>
-              </div>
-            </div>
+	return (
+		<Paper sx={{ p: 3 }}>
+			<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+				<Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+					<TargetIcon color="primary" />
+					Финансовые цели
+				</Typography>
+				<IconButton onClick={() => setIsAdding(!isAdding)} size="small">
+					{isAdding ? <XIcon /> : <PlusIcon />}
+				</IconButton>
+			</Box>
 
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
-              <div
-                className="h-full bg-primary transition-all duration-500"
-                style={{ width: `${Math.min(g.percentage, 100)}%` }}
-              />
-            </div>
+			{error && (
+				<Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+					{error}
+				</Alert>
+			)}
 
-            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={() => handleDeposit(g.id, g.current_amount)}
-                className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-              >
-                <Edit3 size={12} /> Изменить сумму
-              </button>
-              <button
-                onClick={() => handleDelete(g.id)}
-                className="text-xs text-red-500 hover:underline"
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+			{isAdding && (
+				<Box component="form" onSubmit={handleSubmit} sx={{ mb: 3, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+					<TextField
+						label="Название"
+						size="small"
+						fullWidth
+						required
+						value={newGoal.name}
+						onChange={(e) => setNewGoal({ ...newGoal, name: e.target.value })}
+						sx={{ mb: 2 }}
+					/>
+					<Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+						<TextField
+							label="Цель (₽)"
+							type="number"
+							size="small"
+							fullWidth
+							required
+							value={newGoal.target_amount}
+							onChange={(e) => setNewGoal({ ...newGoal, target_amount: e.target.value })}
+							inputProps={{ min: 0.01, step: 0.01 }}
+						/>
+						<TextField
+							label="Уже есть (₽)"
+							type="number"
+							size="small"
+							fullWidth
+							value={newGoal.current_amount}
+							onChange={(e) => setNewGoal({ ...newGoal, current_amount: e.target.value })}
+							inputProps={{ min: 0, step: 0.01 }}
+						/>
+					</Box>
+					<TextField
+						label="Дедлайн (необязательно)"
+						type="date"
+						size="small"
+						fullWidth
+						value={newGoal.deadline}
+						onChange={(e) => setNewGoal({ ...newGoal, deadline: e.target.value })}
+						InputLabelProps={{ shrink: true }}
+						sx={{ mb: 2 }}
+					/>
+					<Button type="submit" variant="contained" fullWidth>
+						Создать
+					</Button>
+				</Box>
+			)}
+
+			<Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+				{goals.length === 0 && !isAdding && (
+					<Typography color="text.secondary" align="center" py={2}>
+						Нет активных целей
+					</Typography>
+				)}
+
+				{goals.map((g) => (
+					<Paper
+						key={g.id}
+						variant="outlined"
+						sx={{ p: 2, position: 'relative', '&:hover .actions': { opacity: 1 } }}
+					>
+						<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+							<Box>
+								<Typography variant="subtitle2">{g.name}</Typography>
+								<Typography variant="caption" color="text.secondary">
+									{formatCurrency(g.current_amount)} из {formatCurrency(g.target_amount)}
+								</Typography>
+							</Box>
+							<Typography variant="body2" fontWeight="bold" color="primary">
+								{g.percentage}%
+							</Typography>
+						</Box>
+
+						<LinearProgress
+							variant="determinate"
+							value={Math.min(g.percentage, 100)}
+							sx={{ height: 8, borderRadius: 4, mb: 2 }}
+						/>
+
+						<Box
+							className="actions"
+							sx={{
+								position: 'absolute',
+								top: 8,
+								right: 8,
+								opacity: 0,
+								transition: 'opacity 0.2s',
+								display: 'flex',
+								gap: 1,
+							}}
+						>
+							<IconButton
+								size="small"
+								onClick={() => setDepositDialog({ open: true, id: g.id, currentAmount: g.current_amount })}
+							>
+								<EditIcon fontSize="small" />
+							</IconButton>
+							<IconButton size="small" onClick={() => handleDelete(g.id)} color="error">
+								<TrashIcon fontSize="small" />
+							</IconButton>
+						</Box>
+					</Paper>
+				))}
+			</Box>
+
+			{/* Deposit Dialog */}
+			<Dialog open={depositDialog.open} onClose={() => setDepositDialog({ open: false, id: null, currentAmount: 0 })}>
+				<DialogTitle>Изменить сумму накоплений</DialogTitle>
+				<DialogContent>
+					<TextField
+						autoFocus
+						margin="dense"
+						label="Текущая сумма (₽)"
+						type="number"
+						fullWidth
+						value={depositDialog.currentAmount}
+						onChange={(e) => setDepositDialog({ ...depositDialog, currentAmount: e.target.value })}
+						inputProps={{ min: 0, step: 0.01 }}
+					/>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setDepositDialog({ open: false, id: null, currentAmount: 0 })}>Отмена</Button>
+					<Button onClick={handleDeposit} variant="contained">Сохранить</Button>
+				</DialogActions>
+			</Dialog>
+		</Paper>
+	);
 };

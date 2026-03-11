@@ -1,16 +1,30 @@
-// src/App.jsx
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import {
-  LayoutDashboard,
-  Calendar,
-  RefreshCw,
-  Loader2,
-  ChevronLeft,
-  ChevronRight
-} from 'lucide-react';
+	Box,
+	Container,
+	AppBar,
+	Toolbar,
+	Typography,
+	IconButton,
+	Button,
+	Paper,
+	Badge,
+	CircularProgress,
+	BottomNavigation,
+	BottomNavigationAction,
+	Alert,
+	Snackbar,
+} from '@mui/material';
+import {
+	Dashboard as DashboardIcon,
+	CalendarMonth as CalendarIcon,
+	Refresh as RefreshIcon,
+	ChevronLeft as ChevronLeftIcon,
+	ChevronRight as ChevronRightIcon,
+} from '@mui/icons-material';
 
 import { FileUpload } from './components/FileUpload';
 import { TransactionList } from './components/TransactionList';
@@ -24,214 +38,251 @@ import { GoalList } from './components/GoalList';
 import { WeeklyReport } from './components/WeeklyReport';
 
 import {
-  transactionService,
-  categoryService,
-  budgetService,
-  insightService,
-  goalService
+	transactionService,
+	categoryService,
+	budgetService,
+	insightService,
+	goalService,
 } from './services/api';
 
 function App() {
-  const [transactions, setTransactions] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [budgets, setBudgets] = useState([]);
-  const [insights, setInsights] = useState([]);
-  const [goals, setGoals] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [dateFilter, setDateFilter] = useState('2025-12');
-  const [activeView, setActiveView] = useState('dashboard');
+	const [transactions, setTransactions] = useState([]);
+	const [categories, setCategories] = useState([]);
+	const [budgets, setBudgets] = useState([]);
+	const [insights, setInsights] = useState([]);
+	const [goals, setGoals] = useState([]);
+	const [error, setError] = useState(null);
+	const [loading, setLoading] = useState(false);
+	const [dateFilter, setDateFilter] = useState(() => format(new Date(), 'yyyy-MM'));
+	const [activeView, setActiveView] = useState('dashboard');
 
-  const getPeriodBounds = () => {
-    const [year, month] = dateFilter.split('-');
-    const lastDay = new Date(year, month, 0).getDate();
-    return {
-      startDate: `${year}-${month}-01`,
-      endDate: `${year}-${month}-${lastDay}`
-    };
-  };
+	const getPeriodBounds = () => {
+		const [year, month] = dateFilter.split('-');
+		const lastDay = new Date(year, month, 0).getDate();
+		return {
+			startDate: `${year}-${month}-01`,
+			endDate: `${year}-${month}-${lastDay}`,
+		};
+	};
 
-  const { startDate, endDate } = getPeriodBounds();
+	const { startDate, endDate } = getPeriodBounds();
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [cats, transRes, buds, ins, gls] = await Promise.all([
-        categoryService.getAll(),
-        transactionService.getAll({ start_date: startDate, end_date: endDate }),
-        budgetService.getStatus(startDate, endDate),
-        insightService.getAll(),
-        goalService.getAll()
-      ]);
+	const fetchData = async () => {
+		setLoading(true);
+		try {
+			const [cats, transRes, buds, ins, gls] = await Promise.all([
+				categoryService.getAll(),
+				transactionService.getAll({ start_date: startDate, end_date: endDate }),
+				budgetService.getStatus(startDate, endDate),
+				insightService.getAll(),
+				goalService.getAll(),
+			]);
 
-      setCategories(cats || []);
-      setTransactions(transRes?.items || transRes || []);
-      setBudgets(buds || []);
-      setInsights(ins || []);
-      setGoals(gls || []);
-    } catch (err) {
-      console.error('Fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+			setCategories(cats || []);
+			setTransactions(transRes?.items || transRes || []);
+			setBudgets(buds || []);
+			setInsights(ins || []);
+			setGoals(gls || []);
+			setError(null);
+		} catch (err) {
+			setError('Не удалось загрузить данные. Проверьте соединение с сервером.');
+			console.error('Fetch error:', err);
+		} finally {
+			setLoading(false);
+		}
+	};
 
-  useEffect(() => {
-    fetchData();
-  }, [dateFilter]);
+	useEffect(() => {
+		fetchData();
+	}, [dateFilter]);
 
-  const handleRefresh = () => {
-    fetchData();
-  };
+	const handleRefresh = () => {
+		fetchData();
+	};
 
-  const changeMonth = (delta) => {
-    const [year, month] = dateFilter.split('-').map(Number);
-    const newDate = new Date(year, month - 1 + delta, 1);
-    setDateFilter(format(newDate, 'yyyy-MM'));
-  };
+	const changeMonth = (delta) => {
+		const [year, month] = dateFilter.split('-').map(Number);
+		const newDate = new Date(year, month - 1 + delta, 1);
+		setDateFilter(format(newDate, 'yyyy-MM'));
+	};
 
-  const displayMonth = format(parseISO(`${dateFilter}-01`), 'LLLL yyyy', { locale: ru });
+	const displayMonth = format(parseISO(`${dateFilter}-01`), 'LLLL yyyy', { locale: ru });
 
-  return (
-    <>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-        {/* Fixed Header */}
-        <motion.header
-          initial={{ y: -100 }}
-          animate={{ y: 0 }}
-          className="fixed top-0 left-0 right-0 z-40 glass border-b border-white/20 backdrop-blur-lg"
-        >
-          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                WealthWise
-              </h1>
+	return (
 
-              <nav className="hidden md:flex items-center gap-1 bg-white/60 backdrop-blur rounded-full px-2 py-1 border border-white/30">
-                <button
-                  onClick={() => setActiveView('dashboard')}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-full transition-all ${
-                    activeView === 'dashboard'
-                      ? 'bg-white shadow-md text-blue-700'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <LayoutDashboard size={18} />
-                  <span className="font-medium">Дашборд</span>
-                </button>
-                <button
-                  onClick={() => setActiveView('report')}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-full transition-all ${
-                    activeView === 'report'
-                      ? 'bg-white shadow-md text-blue-700'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Calendar size={18} />
-                  <span className="font-medium">Отчёт</span>
-                </button>
-              </nav>
-            </div>
+		<Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+			<AppBar position="fixed" color="inherit" elevation={0} sx={{ backdropFilter: 'blur(12px)', bgcolor: 'rgba(255,255,255,0.8)' }}>
+				<Toolbar sx={{ justifyContent: 'space-between' }}>
+					<Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+						<Typography variant="h5" sx={{ fontWeight: 700, background: 'linear-gradient(135deg, #3B82F6, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+							WealthWise
+						</Typography>
+						<Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, bgcolor: 'rgba(255,255,255,0.6)', borderRadius: 10, p: 0.5 }}>
+							<Button
+								startIcon={<DashboardIcon />}
+								onClick={() => setActiveView('dashboard')}
+								variant={activeView === 'dashboard' ? 'contained' : 'text'}
+								sx={{ borderRadius: 10 }}
+							>
+								Дашборд
+							</Button>
+							<Button
+								startIcon={<CalendarIcon />}
+								onClick={() => setActiveView('report')}
+								variant={activeView === 'report' ? 'contained' : 'text'}
+								sx={{ borderRadius: 10 }}
+							>
+								Отчёт
+							</Button>
+						</Box>
+					</Box>
 
-            <div className="flex items-center gap-4">
-              {/* Month Picker */}
-              <div className="flex items-center gap-3 bg-white/70 backdrop-blur rounded-full px-4 py-2.5 border border-white/40 shadow-sm">
-                <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-white/60 rounded-full transition">
-                  <ChevronLeft size={18} />
-                </button>
-                <span className="font-semibold text-slate-800 min-w-32 text-center capitalize">
-                  {displayMonth}
-                </span>
-                <button onClick={() => changeMonth(1)} className="p-1 hover:bg-white/60 rounded-full transition">
-                  <ChevronRight size={18} />
-                </button>
-              </div>
+					<Box
+						sx={{
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'space-between',
+							width: '100%',
+							flexWrap: 'wrap',
+							gap: 1,
+						}}
+					>
+						{/* Блок с месяцем */}
+						<Paper
+							elevation={0}
+							sx={{
+								display: 'flex',
+								alignItems: 'center',
+								bgcolor: 'rgba(255,255,255,0.7)',
+								borderRadius: 20,
+								p: 0.2,
+								ml: 1, 
+								flex: { xs: '1 1 auto', sm: '0 1 auto' },
+								minWidth: { xs: '140px', sm: 'auto' },
+							}}
+						>
+							<IconButton onClick={() => changeMonth(-1)} size="small" sx={{ p: 0.5 }}>
+								<ChevronLeftIcon fontSize="small" />
+							</IconButton>
+							<Typography
+								variant="body2"
+								sx={{
+									fontWeight: 600,
+									px: 1,
+									fontSize: { xs: '0.8rem', sm: '0.9rem' },
+									whiteSpace: 'nowrap',
+								}}
+							>
+								{displayMonth}
+							</Typography>
+							<IconButton onClick={() => changeMonth(1)} size="small" sx={{ p: 0.5 }}>
+								<ChevronRightIcon fontSize="small" />
+							</IconButton>
+						</Paper>
 
-              <button
-                onClick={handleRefresh}
-                disabled={loading}
-                className="relative p-3 bg-white/80 backdrop-blur rounded-full shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95"
-              >
-                {loading ? (
-                  <Loader2 size={20} className="animate-spin text-blue-600" />
-                ) : (
-                  <RefreshCw size={20} className="text-blue-600" />
-                )}
-                {loading && (
-                  <span className="absolute inset-0 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
-                )}
-              </button>
-            </div>
-          </div>
-        </motion.header>
+						{/* Кнопка обновления */}
+						<IconButton
+							onClick={handleRefresh}
+							disabled={loading}
+							size="small"
+							sx={{
+								bgcolor: 'rgba(255,255,255,0.7)',
+								'&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
+							}}
+						>
+							{loading ? <CircularProgress size={20} /> : <RefreshIcon fontSize="small" />}
+						</IconButton>
+					</Box>
+				</Toolbar>
+			</AppBar>
 
-        {/* Main Content */}
-        <AnimatePresence mode="wait">
-          {activeView === 'dashboard' ? (
-            <motion.main
-              key="dashboard"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="pt-28 pb-12 px-6 max-w-7xl mx-auto"
-            >
-              <InsightsPanel insights={insights} />
+			<Container maxWidth="xl" sx={{ pt: { xs: 10, sm: 12 }, pb: { xs: 10, sm: 12 } }}>
+				<AnimatePresence mode="wait">
+					{activeView === 'dashboard' ? (
+						<motion.div
+							key="dashboard"
+							initial={{ opacity: 0 }}
+							animate={{ opacity: 1 }}
+							exit={{ opacity: 0 }}
+						>
+							<InsightsPanel insights={insights} />
+							<SummaryCards transactions={transactions} />
 
-              <SummaryCards transactions={transactions} />
+							<Box sx={{ display: 'grid', gridTemplateColumns: { lg: '1fr 2fr' }, gap: 4 }}>
+								{/* Left column */}
+								<Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+									<FileUpload onUploadSuccess={handleRefresh} />
+									<BudgetList budgets={budgets} categories={categories} onUpdate={handleRefresh} />
+									<CategoryChart transactions={transactions} />
+									<GoalList goals={goals} onUpdate={handleRefresh} />
+								</Box>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Левая колонка */}
-                <div className="lg:col-span-4 flex flex-col gap-8">
-                  <FileUpload onUploadSuccess={handleRefresh} />
-                  <BudgetList budgets={budgets} categories={categories} onUpdate={handleRefresh} />
-                  <CategoryChart transactions={transactions} />
-                  <GoalList goals={goals} onUpdate={handleRefresh} />
-                </div>
+								{/* Right column */}
+								<Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+									<TrendChart transactions={transactions} />
 
-                {/* Правая колонка */}
-                <div className="lg:col-span-8 flex flex-col gap-8">
-                  <TrendChart transactions={transactions} />
+									<Paper sx={{ p: 3 }}>
+										<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+											<Typography variant="h6">История операций</Typography>
+											<Badge badgeContent={transactions.length} color="primary" showZero>
+												<Typography variant="body2">операций</Typography>
+											</Badge>
+										</Box>
+										{loading && transactions.length === 0 ? (
+											<Box sx={{ textAlign: 'center', py: 8 }}>
+												<CircularProgress />
+											</Box>
+										) : (
+											<TransactionList
+												transactions={transactions}
+												categories={categories}
+												onTransactionUpdate={handleRefresh}
+											/>
+										)}
+									</Paper>
+								</Box>
+							</Box>
+						</motion.div>
+					) : (
+						<motion.div
+							key="report"
+							initial={{ opacity: 0, y: 30 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, y: -30 }}
+						>
+							<WeeklyReport />
+						</motion.div>
+					)}
+				</AnimatePresence>
+			</Container>
+			<Snackbar
+				open={!!error}
+				autoHideDuration={6000}
+				onClose={() => setError(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }} // можно изменить
+			>
+				<Alert
+					onClose={() => setError(null)}
+					severity="error"
+					variant="filled" // или "standard" / "outlined"
+					sx={{ width: '100%' }}
+				>
+					{error}
+				</Alert>
+			</Snackbar>
 
-                  <div className="bg-white/80 backdrop-blur rounded-2xl shadow-xl border border-white/50 overflow-hidden">
-                    <div className="p-6 border-b border-slate-100/60 bg-gradient-to-r from-blue-500/10 to-indigo-500/10">
-                      <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-bold text-slate-800">История операций</h2>
-                        <span className="text-sm font-medium px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full">
-                          {transactions.length} операций
-                        </span>
-                      </div>
-                    </div>
-                    <div className="p-6">
-                      {loading && transactions.length === 0 ? (
-                        <div className="text-center py-16 text-slate-400">Загрузка операций...</div>
-                      ) : (
-                        <TransactionList
-                          transactions={transactions}
-                          categories={categories}
-                          onTransactionUpdate={handleRefresh}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.main>
-          ) : (
-            <motion.main
-              key="report"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              className="pt-28 pb-12 px-6 max-w-5xl mx-auto"
-            >
-              <WeeklyReport />
-            </motion.main>
-          )}
-        </AnimatePresence>
-
-        <ChatWidget />
-      </div>
-    </>
-  );
+			<BottomNavigation
+				value={activeView}
+				onChange={(event, newValue) => setActiveView(newValue)}
+				showLabels
+				sx={{ display: { xs: 'flex', md: 'none' }, position: 'fixed', bottom: 0, left: 0, right: 0 }}
+			>
+				<BottomNavigationAction label="Дашборд" value="dashboard" icon={<DashboardIcon />} />
+				<BottomNavigationAction label="Отчёт" value="report" icon={<CalendarIcon />} />
+			</BottomNavigation>
+			<ChatWidget />
+		</Box>
+	);
 }
 
 export default App;

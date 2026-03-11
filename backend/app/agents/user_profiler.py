@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
-from app.models import Transaction, Category, Budget, Goal
+from backend.app.models import Transaction, Category, Budget, Goal
 from datetime import datetime, timedelta
 from typing import Dict, List
 import json

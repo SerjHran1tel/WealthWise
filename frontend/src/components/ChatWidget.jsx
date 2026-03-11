@@ -1,120 +1,166 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
+import {
+	Paper,
+	IconButton,
+	TextField,
+	Avatar,
+	Box,
+	Typography,
+	CircularProgress,
+} from '@mui/material';
+import {
+	Chat as MessageCircleIcon,
+	Close as XIcon,
+	Send as SendIcon,
+	SmartToy as BotIcon,
+	Person as UserIcon,
+} from '@mui/icons-material';
 import { chatService } from '../services/api';
 
 export const ChatWidget = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    { id: 1, text: "Привет! Я твой финансовый ассистент. Спроси меня о балансе или тратах.", sender: 'bot' }
-  ]);
-  const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+	const [isOpen, setIsOpen] = useState(false);
+	const [messages, setMessages] = useState([
+		{ id: '1', text: 'Привет! Я твой финансовый ассистент. Спроси меня о балансе или тратах.', sender: 'bot' },
+	]);
+	const [inputValue, setInputValue] = useState('');
+	const [isLoading, setIsLoading] = useState(false);
 
-  const messagesEndRef = useRef(null);
+	const messagesEndRef = useRef(null);
+	const inputRef = useRef(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+	const scrollToBottom = () => {
+		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+	};
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isOpen]);
+	useEffect(() => {
+		scrollToBottom();
+	}, [messages]);
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!inputValue.trim()) return;
+	useEffect(() => {
+		if (isOpen) {
+			inputRef.current?.focus();
+		}
+	}, [isOpen]);
 
-    const userMsg = { id: Date.now(), text: inputValue, sender: 'user' };
-    setMessages(prev => [...prev, userMsg]);
-    setInputValue('');
-    setIsLoading(true);
+	const handleSend = async (e) => {
+		e.preventDefault();
+		if (!inputValue.trim()) return;
 
-    try {
-      const data = await chatService.sendMessage(userMsg.text);
-      const botMsg = { id: Date.now() + 1, text: data.response, sender: 'bot' };
-      setMessages(prev => [...prev, botMsg]);
-    } catch (error) {
-      console.error("Chat error:", error);
-      const errorMsg = { id: Date.now() + 1, text: "Ошибка связи с сервером.", sender: 'bot' };
-      setMessages(prev => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+		const userMsg = { id: crypto.randomUUID(), text: inputValue, sender: 'user' };
+		setMessages((prev) => [...prev, userMsg]);
+		setInputValue('');
+		setIsLoading(true);
 
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-      {/* Окно чата */}
-      {isOpen && (
-        <div className="bg-white w-80 h-96 rounded-lg shadow-xl mb-4 flex flex-col border border-gray-200 overflow-hidden">
-          {/* Header */}
-          <div className="bg-primary p-3 flex justify-between items-center text-white">
-            <div className="flex items-center gap-2">
-              <Bot size={20} />
-              <span className="font-medium">WealthWise AI</span>
-            </div>
-            <button onClick={() => setIsOpen(false)} className="hover:bg-blue-600 rounded p-1">
-              <X size={18} />
-            </button>
-          </div>
+		try {
+			const data = await chatService.sendMessage(userMsg.text);
+			const botMsg = { id: crypto.randomUUID(), text: data.response, sender: 'bot' };
+			setMessages((prev) => [...prev, botMsg]);
+		} catch (error) {
+			console.error('Chat error:', error);
+			const errorMsg = { id: crypto.randomUUID(), text: 'Ошибка связи с сервером.', sender: 'bot' };
+			setMessages((prev) => [...prev, errorMsg]);
+		} finally {
+			setIsLoading(false);
+		}
+	};
 
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-3">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-2 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0
-                  ${msg.sender === 'user' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
-                  {msg.sender === 'user' ? <User size={14} /> : <Bot size={14} />}
-                </div>
-                <div className={`max-w-[80%] p-2 rounded-lg text-sm whitespace-pre-line
-                  ${msg.sender === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-white border text-gray-700 rounded-tl-none shadow-sm'}`}>
-                  {msg.text}
-                </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex gap-2">
-                 <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                    <Bot size={14} className="text-green-600" />
-                 </div>
-                 <div className="bg-white border p-2 rounded-lg rounded-tl-none shadow-sm text-gray-400 text-sm italic">
-                    Печатает...
-                 </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+	return (
+		<Box sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+			{isOpen && (
+				<Paper
+					elevation={6}
+					sx={{
+						width: 320,
+						height: 400,
+						mb: 2,
+						display: 'flex',
+						flexDirection: 'column',
+						overflow: 'hidden',
+						borderRadius: 3,
+					}}
+				>
+					{/* Header */}
+					<Box sx={{ bgcolor: 'primary.main', color: 'white', p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+							<BotIcon />
+							<Typography variant="subtitle1" fontWeight="bold">WealthWise AI</Typography>
+						</Box>
+						<IconButton size="small" sx={{ color: 'white' }} onClick={() => setIsOpen(false)}>
+							<XIcon />
+						</IconButton>
+					</Box>
 
-          {/* Input Area */}
-          <form onSubmit={handleSend} className="p-3 bg-white border-t flex gap-2">
-            <input
-              type="text"
-              placeholder="Спроси о финансах..."
-              className="flex-1 text-sm border rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-primary"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !inputValue.trim()}
-              className="bg-primary text-white p-2 rounded-full hover:bg-blue-600 disabled:opacity-50 transition"
-            >
-              <Send size={16} />
-            </button>
-          </form>
-        </div>
-      )}
+					{/* Messages */}
+					<Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: 'grey.50' }}>
+						{messages.map((msg) => (
+							<Box
+								key={msg.id}
+								sx={{ display: 'flex', gap: 1, mb: 2, flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row' }}
+							>
+								<Avatar sx={{ width: 32, height: 32, bgcolor: msg.sender === 'user' ? 'primary.light' : 'success.light' }}>
+									{msg.sender === 'user' ? <UserIcon fontSize="small" /> : <BotIcon fontSize="small" />}
+								</Avatar>
+								<Paper
+									variant="outlined"
+									sx={{
+										p: 1.5,
+										maxWidth: '70%',
+										bgcolor: msg.sender === 'user' ? 'primary.main' : 'background.paper',
+										color: msg.sender === 'user' ? 'white' : 'text.primary',
+										borderRadius: 2,
+										borderTopLeftRadius: msg.sender === 'bot' ? 0 : 2,
+										borderTopRightRadius: msg.sender === 'user' ? 0 : 2,
+									}}
+								>
+									<Typography variant="body2">{msg.text}</Typography>
+								</Paper>
+							</Box>
+						))}
+						{isLoading && (
+							<Box sx={{ display: 'flex', gap: 1 }}>
+								<Avatar sx={{ width: 32, height: 32, bgcolor: 'success.light' }}>
+									<BotIcon fontSize="small" />
+								</Avatar>
+								<Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.paper', borderRadius: 2 }}>
+									<Typography variant="body2" color="text.secondary" fontStyle="italic">
+										Печатает...
+									</Typography>
+								</Paper>
+							</Box>
+						)}
+						<div ref={messagesEndRef} />
+					</Box>
 
-      {/* Кнопка открытия */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="bg-primary text-white p-4 rounded-full shadow-lg hover:bg-blue-600 transition duration-200 flex items-center justify-center"
-      >
-        {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
-      </button>
-    </div>
-  );
+					{/* Input */}
+					<Box component="form" onSubmit={handleSend} sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 1 }}>
+						<TextField
+							inputRef={inputRef}
+							size="small"
+							fullWidth
+							placeholder="Спроси о финансах..."
+							value={inputValue}
+							onChange={(e) => setInputValue(e.target.value)}
+							disabled={isLoading}
+						/>
+						<IconButton type="submit" color="primary" disabled={isLoading || !inputValue.trim()}>
+							<SendIcon />
+						</IconButton>
+					</Box>
+				</Paper>
+			)}
+
+			<IconButton
+				onClick={() => setIsOpen(!isOpen)}
+				sx={{
+					bgcolor: 'primary.main',
+					color: 'white',
+					'&:hover': { bgcolor: 'primary.dark' },
+					width: 56,
+					height: 56,
+				}}
+			>
+				{isOpen ? <XIcon /> : <MessageCircleIcon />}
+			</IconButton>
+		</Box>
+	);
 };

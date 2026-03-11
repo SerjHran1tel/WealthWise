@@ -1,108 +1,143 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, AlertCircle, Target } from 'lucide-react';
+import {
+	Paper,
+	Typography,
+	Box,
+	Grid,
+	Alert,
+	CircularProgress,
+} from '@mui/material';
+import {
+	CalendarMonth as CalendarIcon,
+	TrendingUp as TrendingUpIcon,
+	Warning as AlertCircleIcon,
+	EmojiEvents as TargetIcon,
+} from '@mui/icons-material';
+import { reportService } from '../services/api';
 
 export const WeeklyReport = () => {
-  const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(true);
+	const [report, setReport] = useState(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchReport();
-  }, []);
+	useEffect(() => {
+		fetchReport();
+	}, []);
 
-  const fetchReport = async () => {
-    try {
-      const res = await fetch('http://localhost:8000/api/reports/weekly');
-      const data = await res.json();
-      setReport(data);
-    } catch (error) {
-      console.error('Failed to load report:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+	const fetchReport = async () => {
+		try {
+			setError(null);
+			const data = await reportService.getWeekly();
+			setReport(data);
+		} catch (error) {
+			console.error('Failed to load report:', error);
+			setError('Не удалось загрузить отчёт. Проверьте соединение с сервером.');
+		} finally {
+			setLoading(false);
+		}
+	};
 
-  if (loading) return <div className="text-center py-8">Загрузка отчёта...</div>;
-  if (!report) return null;
+	if (loading) return (
+		<Box sx={{ textAlign: 'center', py: 8 }}>
+			<CircularProgress />
+		</Box>
+	);
 
-  return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-          <Calendar className="text-blue-500" size={24} />
-          Еженедельный отчёт
-        </h2>
-        <span className="text-sm text-slate-500">{report.period}</span>
-      </div>
+	if (error) return (
+		<Alert severity="error" sx={{ mt: 2 }}>
+			{error}
+		</Alert>
+	);
 
-      {/* Статистика */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <p className="text-xs text-blue-600 mb-1">Расходы</p>
-          <p className="text-2xl font-bold text-blue-900">
-            {report.stats.expenses.toLocaleString()} ₽
-          </p>
-        </div>
-        <div className="bg-green-50 p-4 rounded-lg">
-          <p className="text-xs text-green-600 mb-1">Доходы</p>
-          <p className="text-2xl font-bold text-green-900">
-            {report.stats.income.toLocaleString()} ₽
-          </p>
-        </div>
-        <div className="bg-purple-50 p-4 rounded-lg">
-          <p className="text-xs text-purple-600 mb-1">Баланс</p>
-          <p className="text-2xl font-bold text-purple-900">
-            {report.stats.balance.toLocaleString()} ₽
-          </p>
-        </div>
-      </div>
+	if (!report) return null;
 
-      {/* Сравнение */}
-      <div className="mb-6 p-4 bg-slate-50 rounded-lg">
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp size={16} className="text-slate-600" />
-          <span className="text-sm font-medium text-slate-700">
-            Сравнение с прошлой неделей
-          </span>
-        </div>
-        <p className={`text-lg font-bold ${
-          report.comparison.change_percent > 0 ? 'text-red-600' : 'text-green-600'
-        }`}>
-          {report.comparison.change_percent > 0 ? '+' : ''}
-          {report.comparison.change_percent}%
-        </p>
-      </div>
+	return (
+		<Paper sx={{ p: 3, mb: 4 }}>
+			<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+				<Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+					<CalendarIcon color="primary" />
+					Еженедельный отчёт
+				</Typography>
+				<Typography variant="body2" color="text.secondary">
+					{report.period}
+				</Typography>
+			</Box>
 
-      {/* Проблемы */}
-      {report.issues.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertCircle size={16} className="text-orange-500" />
-            <span className="text-sm font-medium text-slate-700">Требует внимания</span>
-          </div>
-          <div className="space-y-2">
-            {report.issues.map((issue, idx) => (
-              <div key={idx} className="text-sm text-orange-700 bg-orange-50 p-2 rounded">
-                {issue}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+			{/* Stats */}
+			<Grid container spacing={2} sx={{ mb: 3 }}>
+				<Grid item xs={12} sm={4}>
+					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'primary.light' }}>
+						<Typography variant="caption" color="primary.contrastText">Расходы</Typography>
+						<Typography variant="h5" fontWeight="bold" color="primary.contrastText">
+							{report.stats.expenses.toLocaleString()} ₽
+						</Typography>
+					</Paper>
+				</Grid>
+				<Grid item xs={12} sm={4}>
+					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'success.light' }}>
+						<Typography variant="caption" color="success.contrastText">Доходы</Typography>
+						<Typography variant="h5" fontWeight="bold" color="success.contrastText">
+							{report.stats.income.toLocaleString()} ₽
+						</Typography>
+					</Paper>
+				</Grid>
+				<Grid item xs={12} sm={4}>
+					<Paper variant="outlined" sx={{ p: 2, bgcolor: 'secondary.light' }}>
+						<Typography variant="caption" color="secondary.contrastText">Баланс</Typography>
+						<Typography variant="h5" fontWeight="bold" color="secondary.contrastText">
+							{report.stats.balance.toLocaleString()} ₽
+						</Typography>
+					</Paper>
+				</Grid>
+			</Grid>
 
-      {/* Рекомендации */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Target size={16} className="text-blue-500" />
-          <span className="text-sm font-medium text-slate-700">Рекомендации AI</span>
-        </div>
-        <div className="space-y-2">
-          {report.recommendations.map((rec, idx) => (
-            <div key={idx} className="text-sm text-slate-700 bg-blue-50 p-3 rounded-lg">
-              • {rec}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+			{/* Comparison */}
+			<Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+				<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+					<TrendingUpIcon color="action" />
+					<Typography variant="body2" fontWeight="medium">Сравнение с прошлой неделей</Typography>
+				</Box>
+				<Typography
+					variant="h6"
+					fontWeight="bold"
+					color={report.comparison.change_percent > 0 ? 'error.main' : 'success.main'}
+				>
+					{report.comparison.change_percent > 0 ? '+' : ''}
+					{report.comparison.change_percent}%
+				</Typography>
+			</Paper>
+
+			{/* Issues */}
+			{report.issues.length > 0 && (
+				<Box sx={{ mb: 3 }}>
+					<Typography variant="body2" fontWeight="medium" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+						<AlertCircleIcon color="warning" />
+						Требует внимания
+					</Typography>
+					<Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+						{report.issues.map((issue, idx) => (
+							<Alert key={idx} severity="warning" sx={{ py: 0 }}>
+								{issue}
+							</Alert>
+						))}
+					</Box>
+				</Box>
+			)}
+
+			{/* Recommendations */}
+			<Box>
+				<Typography variant="body2" fontWeight="medium" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+					<TargetIcon color="primary" />
+					Рекомендации AI
+				</Typography>
+				<Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+					{report.recommendations.map((rec, idx) => (
+						<Alert key={idx} severity="info" sx={{ py: 0 }}>
+							{rec}
+						</Alert>
+					))}
+				</Box>
+			</Box>
+		</Paper>
+	);
 };
