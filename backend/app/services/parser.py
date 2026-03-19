@@ -92,31 +92,54 @@ def parse_amount(amount_str: str) -> Decimal:
         raise AmountParseError(f"Cannot parse amount '{amount_str}': {e}")
 
 
+def parse_is_income_flag(value: str) -> Optional[bool]:
+    """
+    Парсит булевый флаг is_income из строки CSV.
+    Возвращает True/False или None если не распознано.
+    """
+    v = value.strip().lower()
+    if v in ('true', '1', 'yes', 'да', 'доход', 'income'):
+        return True
+    if v in ('false', '0', 'no', 'нет', 'расход', 'expense'):
+        return False
+    return None
+
+
 def detect_is_income(description: str, amount: Decimal) -> bool:
     """
-    Определяет, является ли транзакция доходом на основе описания и суммы.
+    Эвристическое определение типа транзакции по описанию и знаку суммы.
+    Используется только как fallback, когда в файле нет явного поля is_income.
     """
+    # Отрицательная сумма — однозначно расход
+    if amount < 0:
+        return False
+
     desc_lower = description.lower()
 
-    # Ключевые слова для доходов
+    # Явные ключевые слова доходов
     income_keywords = [
-        'зарплата', 'salary', 'зачисление', 'пополнение', 'возврат',
-        'income', 'deposit', 'refund', 'cashback', 'аванс', 'премия',
-        'bonus', 'дивиденды', 'проценты', 'interest'
+        'зарплата', 'salary', 'зачисление', 'возврат',
+        'income', 'refund', 'cashback', 'аванс', 'премия',
+        'bonus', 'дивиденды', 'проценты', 'interest', 'перевод от'
     ]
-
     for keyword in income_keywords:
         if keyword in desc_lower:
             return True
 
-    # Если сумма положительная и нет явных признаков расхода
-    if amount > 0:
-        expense_keywords = ['оплата', 'покупка', 'списание', 'payment', 'purchase']
-        has_expense_keyword = any(kw in desc_lower for kw in expense_keywords)
-        if not has_expense_keyword:
-            return True
+    # Явные ключевые слова расходов
+    expense_keywords = [
+        'оплата', 'покупка', 'списание', 'payment', 'purchase',
+        'такси', 'продукты', 'кафе', 'ресторан', 'аптека',
+        'магазин', 'подписка', 'билет', 'транспорт', 'бензин',
+        'коммунальн', 'интернет', 'доставка', 'маникюр', 'стрижка',
+        'парикмахер', 'химчистка', 'автомойка'
+    ]
+    for keyword in expense_keywords:
+        if keyword in desc_lower:
+            return False
 
-    return False
+    # Положительная сумма без явных признаков → доход
+    return amount > 0
 
 
 def parse_csv(file_content: bytes) -> Tuple[List[Dict], List[str]]:
@@ -186,14 +209,24 @@ def parse_csv(file_content: bytes) -> Tuple[List[Dict], List[str]]:
 
                 dt = parse_date(date_raw)
                 amount = parse_amount(amount_raw)
-                is_income = detect_is_income(desc_raw, amount)
+
+                # Читаем is_income явно из CSV (колонка 3), иначе — эвристика
+                is_income_raw = row[3].strip() if len(row) > 3 else None
+                if is_income_raw is not None:
+                    parsed_flag = parse_is_income_flag(is_income_raw)
+                    is_income = parsed_flag if parsed_flag is not None else detect_is_income(desc_raw, amount)
+                else:
+                    is_income = detect_is_income(desc_raw, amount)
+
+                # Читаем валюту из CSV (колонка 4), иначе — дефолт
+                currency = row[4].strip() if len(row) > 4 and row[4].strip() else settings.DEFAULT_CURRENCY
 
                 transactions.append({
                     "date": dt,
-                    "description": desc_raw[:500],  # Ограничиваем длину
+                    "description": desc_raw[:500],
                     "amount": abs(amount),
                     "is_income": is_income,
-                    "currency": settings.DEFAULT_CURRENCY
+                    "currency": currency
                 })
 
             except (DateParseError, AmountParseError) as e:
@@ -286,6 +319,7 @@ def parse_pdf(file_content: bytes) -> Tuple[List[Dict], List[str]]:
 
                         dt = parse_date(date_str)
                         amount = parse_amount(amount_str)
+                        # PDF не имеет явного поля is_income — используем эвристику с оригинальным знаком
                         is_income = detect_is_income(desc_str, amount)
 
                         transactions.append({

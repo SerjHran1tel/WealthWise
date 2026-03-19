@@ -28,6 +28,10 @@ export const transactionService = {
 		console.log(`<<< Transactions received: ${response.data.length} items`);
 		return response.data;
 	},
+	clearAll: async () => {
+		const response = await api.delete('/transactions/all/clear');
+		return response.data;
+	},
 	delete: async (id) => {
 		await api.delete(`/transactions/${id}`);
 	},
@@ -50,7 +54,7 @@ export const budgetService = {
 		});
 		return response.data;
 	},
-	create: async (categoryId, amount) => {q
+	create: async (categoryId, amount) => {
 		const response = await api.post('/budgets/', {
 			category_id: categoryId,
 			amount: parseFloat(amount)
@@ -97,6 +101,10 @@ export const goalService = {
 export const reportService = {
 	getWeekly: async () => {
 		const response = await api.get('/reports/weekly');
+		return response.data;
+	},
+	refreshWeekly: async () => {
+		const response = await api.post('/reports/weekly/refresh');
 		return response.data;
 	}
 };

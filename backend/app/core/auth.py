@@ -69,7 +69,7 @@ def get_current_user() -> str:
     Возвращает ID текущего пользователя.
     Для локального использования всегда один пользователь.
     """
-    return "local_user_001"
+    return settings.DEFAULT_USER_ID
 
 
 class AuthConfig:

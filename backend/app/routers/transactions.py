@@ -13,6 +13,7 @@ from backend.app.schemas import (
 )
 from backend.app.services.parser import parse_csv, parse_pdf
 from backend.app.agents.classifier import classifier
+from backend.app.agents.rag_classifier import rag_classifier
 from backend.app.core.config import settings
 from backend.app.core.auth import get_current_user
 import logging
@@ -79,7 +80,14 @@ async def upload_transactions(
 
     for item in raw_transactions:
         try:
-            cat_id = classifier.categorize(db, item['description'], item['amount'])
+            # RAG-классификация: LLM + история + семантический поиск
+            try:
+                cat_id = await rag_classifier.categorize_with_rag(
+                    db, user_id, item['description'], item['amount']
+                )
+            except Exception as rag_err:
+                logger.warning(f"RAG classifier failed, falling back to rule-based: {rag_err}")
+                cat_id = classifier.categorize(db, item['description'], item['amount'])
 
             db_txn = Transaction(
                 user_id=user_id,
@@ -295,3 +303,31 @@ async def get_transactions_summary(
             "end": end_date.isoformat() if end_date else None
         }
     }
+
+
+@router.delete("/all/clear")
+async def clear_all_transactions(
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    Удалить ВСЕ транзакции пользователя.
+    Используется для сброса данных перед повторным импортом.
+    """
+    try:
+        deleted = db.query(Transaction).filter(Transaction.user_id == user_id).delete()
+        db.commit()
+
+        # Сбрасываем кэш RAG классификатора
+        rag_classifier.clear_cache()
+
+        logger.info(f"Cleared {deleted} transactions for user {user_id}")
+        return {
+            "status": "success",
+            "deleted_count": deleted,
+            "message": f"Удалено {deleted} транзакций. Теперь загрузите файл заново."
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error clearing transactions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error clearing transactions: {str(e)}")

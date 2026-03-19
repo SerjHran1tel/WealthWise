@@ -5,21 +5,24 @@ from typing import List
 from backend.app.database import get_db
 from backend.app.models import Goal
 from backend.app.schemas import GoalCreate, GoalResponse, GoalUpdate
+from backend.app.core.auth import get_current_user
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/goals", tags=["goals"])
 
-TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
-
 
 @router.get("/", response_model=List[GoalResponse])
-def get_goals(db: Session = Depends(get_db)):
-    goals = db.query(Goal).filter(Goal.user_id == TEST_USER_ID).all()
+def get_goals(
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    goals = db.query(Goal).filter(Goal.user_id == user_id).all()
 
-    # Добавляем вычисляемое поле процента
     result = []
     for g in goals:
         percentage = (g.current_amount / g.target_amount * 100) if g.target_amount > 0 else 0
-        # Создаем копию объекта для ответа (или можно через Pydantic from_orm)
         g_resp = GoalResponse(
             id=g.id,
             name=g.name,
@@ -35,9 +38,13 @@ def get_goals(db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=GoalResponse)
-def create_goal(goal: GoalCreate, db: Session = Depends(get_db)):
+def create_goal(
+        goal: GoalCreate,
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
     new_goal = Goal(
-        user_id=TEST_USER_ID,
+        user_id=user_id,
         name=goal.name,
         target_amount=goal.target_amount,
         current_amount=goal.current_amount,
@@ -55,9 +62,17 @@ def create_goal(goal: GoalCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{goal_id}/deposit", response_model=GoalResponse)
-def deposit_to_goal(goal_id: str, deposit: GoalUpdate, db: Session = Depends(get_db)):
+def deposit_to_goal(
+        goal_id: str,
+        deposit: GoalUpdate,
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
     """Обновить текущую сумму (положить деньги в копилку)"""
-    goal = db.query(Goal).filter(Goal.id == goal_id).first()
+    goal = db.query(Goal).filter(
+        Goal.id == goal_id,
+        Goal.user_id == user_id
+    ).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
@@ -72,8 +87,15 @@ def deposit_to_goal(goal_id: str, deposit: GoalUpdate, db: Session = Depends(get
 
 
 @router.delete("/{goal_id}")
-def delete_goal(goal_id: str, db: Session = Depends(get_db)):
-    goal = db.query(Goal).filter(Goal.id == goal_id).first()
+def delete_goal(
+        goal_id: str,
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    goal = db.query(Goal).filter(
+        Goal.id == goal_id,
+        Goal.user_id == user_id
+    ).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
     db.delete(goal)

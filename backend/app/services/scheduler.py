@@ -3,6 +3,7 @@ from apscheduler.triggers.cron import CronTrigger
 from backend.app.database import SessionLocal
 from backend.app.agents.weekly_report_agent import weekly_report_agent
 from backend.app.agents.predictive_analytics import predictive_analytics_agent
+from backend.app.core.config import settings
 import logging
 import asyncio
 
@@ -23,7 +24,7 @@ def generate_weekly_reports_for_all_users():
     try:
         # В production здесь был бы запрос всех активных пользователей
         # Для MVP используем тестового пользователя
-        TEST_USER_ID = "local_user_001"
+        TEST_USER_ID = settings.DEFAULT_USER_ID
 
         # Генерируем отчёт
         loop = asyncio.new_event_loop()
@@ -60,7 +61,7 @@ def run_daily_analytics():
 
     db = SessionLocal()
     try:
-        TEST_USER_ID = "local_user_001"
+        TEST_USER_ID = settings.DEFAULT_USER_ID
 
         # Запускаем predictive analytics
         insights_count = predictive_analytics_agent.run_comprehensive_analysis(db, TEST_USER_ID)

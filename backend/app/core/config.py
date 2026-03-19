@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     # Простая авторизация для локального использования
     APP_PASSWORD: str = "wealthwise2024"  # Можно изменить в .env
 
+    # ID пользователя по умолчанию (единая точка конфигурации)
+    DEFAULT_USER_ID: str = "local_user_001"
+
     # Пути
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
     DATA_DIR: Path = BASE_DIR / "data"

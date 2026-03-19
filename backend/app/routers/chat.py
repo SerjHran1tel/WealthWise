@@ -9,7 +9,7 @@ from backend.app.core.auth import get_current_user
 
 # Import advanced chat agent
 try:
-    from app.agents.advanced_chat_agent import advanced_chat_agent
+    from backend.app.agents.advanced_chat_agent import advanced_chat_agent
     USE_ADVANCED = True
 except ImportError:
     # Fallback to basic agent if advanced not available

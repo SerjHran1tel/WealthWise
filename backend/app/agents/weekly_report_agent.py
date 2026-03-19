@@ -3,10 +3,14 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 from backend.app.models import Transaction, Budget, Goal, Insight, Category
 from backend.app.services.ollama_client import ollama_client
-from typing import Dict, List
+from typing import Dict, List, Optional
 import logging
+import time
 
 logger = logging.getLogger(__name__)
+
+# Кэш отчёта: хранится 1 час, чтобы не генерировать повторно
+REPORT_CACHE_TTL = 3600  # секунд
 
 
 class WeeklyReportAgent:
@@ -21,15 +25,29 @@ class WeeklyReportAgent:
     - Предложение конкретных действий
     """
 
-    async def generate_weekly_report(self, db: Session, user_id: str) -> Dict:
+    def __init__(self):
+        # Кэш: user_id -> (report_dict, timestamp)
+        self._report_cache: Dict[str, tuple] = {}
+
+    async def generate_weekly_report(self, db: Session, user_id: str, force: bool = False) -> Dict:
         """
         Генерирует еженедельный отчёт с аналитикой и действиями.
+        Использует кэш на 1 час, чтобы не перегенерировать отчёт при повторных запросах.
         """
+        # Проверяем кэш (если не принудительная генерация)
+        if not force and user_id in self._report_cache:
+            cached_report, cached_ts = self._report_cache[user_id]
+            if time.time() - cached_ts < REPORT_CACHE_TTL:
+                logger.info(f"Returning cached weekly report for user {user_id}")
+                return cached_report
+
         logger.info(f"Generating weekly report for user {user_id}")
 
-        # Период: последние 7 дней
-        week_ago = datetime.now() - timedelta(days=7)
-        two_weeks_ago = datetime.now() - timedelta(days=14)
+        # Период: последние 7 дней — округляем до полуночи,
+        # чтобы транзакции за начальный день (00:00:00) не вылетали из диапазона
+        now = datetime.now()
+        week_ago = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+        two_weeks_ago = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
 
         # Собираем статистику
         stats = self._get_weekly_stats(db, user_id, week_ago)
@@ -65,38 +83,58 @@ class WeeklyReportAgent:
             "generated_at": datetime.now().isoformat()
         }
 
+        # Сохраняем в кэш
+        self._report_cache[user_id] = (report, time.time())
+
         logger.info(f"Weekly report generated for user {user_id}: {len(actions)} actions proposed")
         return report
 
     def _get_weekly_stats(self, db: Session, user_id: str, since: datetime) -> Dict:
         """Статистика за неделю"""
 
+        now = datetime.now()
+
         income = db.query(func.sum(Transaction.amount)).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == True,
-            Transaction.date >= since
+            Transaction.date >= since,
+            Transaction.date <= now
         ).scalar() or 0.0
 
         expenses = db.query(func.sum(Transaction.amount)).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == False,
-            Transaction.date >= since
+            Transaction.date >= since,
+            Transaction.date <= now
         ).scalar() or 0.0
 
         transactions_count = db.query(func.count(Transaction.id)).filter(
             Transaction.user_id == user_id,
-            Transaction.date >= since
+            Transaction.date >= since,
+            Transaction.date <= now
         ).scalar() or 0
 
-        avg_transaction = expenses / transactions_count if transactions_count > 0 else 0
+        # Среднее считаем только по расходным транзакциям
+        expense_count = db.query(func.count(Transaction.id)).filter(
+            Transaction.user_id == user_id,
+            Transaction.is_income == False,
+            Transaction.date >= since,
+            Transaction.date <= now
+        ).scalar() or 0
+
+        avg_transaction = float(expenses) / expense_count if expense_count > 0 else 0
+
+        # Реальный период в днях (чтобы не делить на 7 если данных меньше)
+        days_elapsed = max((datetime.now() - since).days, 1)
 
         return {
             "income": float(income),
             "expenses": float(expenses),
             "balance": float(income - expenses),
             "transactions_count": transactions_count,
+            "expense_count": expense_count,
             "avg_transaction": float(avg_transaction),
-            "daily_avg": float(expenses / 7) if expenses > 0 else 0
+            "daily_avg": float(expenses) / days_elapsed if expenses > 0 else 0
         }
 
     def _compare_with_previous_week(
@@ -116,7 +154,8 @@ class WeeklyReportAgent:
         current_expenses = db.query(func.sum(Transaction.amount)).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == False,
-            Transaction.date >= current_week_start
+            Transaction.date >= current_week_start,
+            Transaction.date <= datetime.now()   # исключаем будущие даты из CSV
         ).scalar() or 0.0
 
         if prev_expenses > 0:
@@ -141,21 +180,32 @@ class WeeklyReportAgent:
             Category.name,
             func.sum(Transaction.amount).label('total'),
             func.count(Transaction.id).label('count')
-        ).join(Transaction).filter(
+        ).select_from(Transaction).join(
+            Category, Transaction.category_id == Category.id
+        ).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == False,
-            Transaction.date >= since
+            Transaction.date >= since,
+            Transaction.date <= datetime.now()  # исключаем будущие даты из CSV
         ).group_by(Category.name).order_by(func.sum(Transaction.amount).desc()).limit(limit).all()
 
-        return [
+        items = [
             {
                 "category": r.name,
                 "amount": float(r.total),
                 "transactions_count": r.count,
-                "percentage": 0  # Будет рассчитано позже
+                "percentage": 0
             }
             for r in results
         ]
+
+        # Считаем процент от общих расходов
+        total_expenses = sum(i["amount"] for i in items)
+        if total_expenses > 0:
+            for item in items:
+                item["percentage"] = round(item["amount"] / total_expenses * 100, 1)
+
+        return items
 
     def _detect_issues(
             self, db: Session, user_id: str, stats: Dict, top_categories: List[Dict]
@@ -211,7 +261,46 @@ class WeeklyReportAgent:
                 "suggestion": "Расходы превысили доходы"
             })
 
-        # 4. Рост трат на 20%+
+        # 4. Рост трат на 20%+ vs предыдущая неделя
+        if top_categories:
+            # Используем те же границы с полуночи, что и основной отчёт
+            _now = datetime.now()
+            _week_ago = (_now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+            _two_weeks_ago = (_now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
+            for cat_data in top_categories[:3]:
+                cat_name = cat_data["category"]
+                # Расходы текущей недели по категории (без будущих дат)
+                current_cat = db.query(func.sum(Transaction.amount)).join(
+                    Transaction.category
+                ).filter(
+                    Transaction.user_id == user_id,
+                    Transaction.is_income == False,
+                    Transaction.date >= _week_ago,
+                    Transaction.date <= _now,        # ← исключаем будущие даты
+                    Category.name == cat_name
+                ).scalar() or 0.0
+                # Расходы прошлой недели по категории
+                prev_cat = db.query(func.sum(Transaction.amount)).join(
+                    Transaction.category
+                ).filter(
+                    Transaction.user_id == user_id,
+                    Transaction.is_income == False,
+                    Transaction.date >= _two_weeks_ago,
+                    Transaction.date < _week_ago,
+                    Category.name == cat_name
+                ).scalar() or 0.0
+
+                if prev_cat > 0:
+                    spike = ((float(current_cat) - float(prev_cat)) / float(prev_cat)) * 100
+                    if spike >= 20:
+                        issues.append({
+                            "type": "spending_spike",
+                            "severity": "medium",
+                            "category": cat_name,
+                            "message": f"Рост расходов на '{cat_name}': +{spike:.0f}% vs прошлая неделя ({current_cat:.0f}₽ vs {prev_cat:.0f}₽)",
+                            "spike_percent": round(spike, 1)
+                        })
+
         return issues
 
     async def _generate_ai_recommendations(
@@ -420,33 +509,52 @@ class WeeklyReportAgent:
         return actions[:5]  # Максимум 5 действий
 
     def _detect_subscriptions(self, db: Session, user_id: str) -> List[Dict]:
-        """Определяет регулярные подписки"""
-
+        """
+        Определяет реальные регулярные подписки.
+        Критерии: одинаковое описание + сумма отличается не более чем на 5%, встречается 2+ раза в разные месяцы.
+        """
         last_60_days = datetime.now() - timedelta(days=60)
 
         txns = db.query(Transaction).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == False,
             Transaction.date >= last_60_days
-        ).all()
+        ).order_by(Transaction.date).all()
 
-        # Группируем по схожим описаниям и суммам
-        recurring = {}
+        # Группируем по ПОЛНОМУ описанию (не обрезаем)
+        by_description: dict = {}
         for t in txns:
-            key = (t.description.lower()[:20], round(float(t.amount), -2))
-            if key not in recurring:
-                recurring[key] = []
-            recurring[key].append(t.date)
+            key = t.description.lower().strip()
+            if key not in by_description:
+                by_description[key] = []
+            by_description[key].append(t)
 
-        # Фильтруем: встречается 2+ раза
         subscriptions = []
-        for (desc, amount), dates in recurring.items():
-            if len(dates) >= 2:
-                subscriptions.append({
-                    'description': desc,
-                    'amount': amount,
-                    'frequency': len(dates)
-                })
+        for desc, txn_list in by_description.items():
+            if len(txn_list) < 2:
+                continue
+
+            # Проверяем, что суммы примерно одинаковые (±5%)
+            amounts = [float(t.amount) for t in txn_list]
+            avg_amount = sum(amounts) / len(amounts)
+            if avg_amount == 0:
+                continue
+
+            all_similar = all(abs(a - avg_amount) / avg_amount <= 0.05 for a in amounts)
+            if not all_similar:
+                continue
+
+            # Проверяем, что платежи идут в РАЗНЫЕ месяцы (настоящая регулярность)
+            months = set((t.date.year, t.date.month) for t in txn_list)
+            if len(months) < 2:
+                continue
+
+            subscriptions.append({
+                'description': desc,
+                'amount': round(avg_amount, 2),
+                'frequency': len(txn_list),
+                'months_seen': len(months)
+            })
 
         return subscriptions
 
