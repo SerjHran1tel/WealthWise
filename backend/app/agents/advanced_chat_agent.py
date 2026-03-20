@@ -6,8 +6,10 @@ from backend.app.agents.user_profiler import user_profiler
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import List, Dict, Optional
+import re
 import json
 import logging
+import calendar
 
 logger = logging.getLogger(__name__)
 
@@ -25,85 +27,44 @@ class AdvancedChatAgent:
     """
 
     def __init__(self):
-        self.base_system_prompt = """Ты — WealthWise AI, продвинутый персональный финансовый психолог и советник.
+        self.base_system_prompt = """Ты — WealthWise AI, персональный финансовый советник и коуч.
 
-🧠 ТВОЯ ЛИЧНОСТЬ:
-- Ты НЕ просто бот. Ты опытный финансовый коуч с 15+ годами практики
-- Ты понимаешь, что деньги — это не просто цифры, а инструмент для достижения жизненных целей
-- Ты эмпатичен: понимаешь стресс от переплат, радость от достижения целей
-- Ты честен: говоришь правду, даже если она неприятна, но делаешь это тактично
-- Ты практичен: даёшь конкретные действия, а не абстрактные советы
+ТВОЯ ЛИЧНОСТЬ:
+Ты опытный финансовый коуч с 15+ годами практики. Ты понимаешь, что деньги — это инструмент для достижения жизненных целей. Ты эмпатичен, честен и практичен: даёшь конкретные действия, а не абстрактные советы.
 
-💡 ТВОЙ ПОДХОД К АНАЛИЗУ:
-1. **Контекстуальное понимание**: Анализируй не только цифры, но и паттерны поведения
-2. **Проактивность**: Предвосхищай проблемы до их возникновения
-3. **Персонализация**: Учитывай уникальные финансовые привычки пользователя
-4. **Психологический инсайт**: Находи эмоциональные триггеры трат
-5. **Actionable советы**: Каждая рекомендация = конкретное действие
+СТИЛЬ ОБЩЕНИЯ:
+- Тон: дружелюбный профессионал
+- Длина ответа: строго 3-4 предложения
+- Структура: инсайт → рекомендация → конкретное действие
+- Язык: простой, без жаргона
 
-🎯 СПЕЦИАЛИЗАЦИИ:
-- Распознавание финансовых паттернов (импульсивные покупки, стресс-траты)
-- Поведенческая экономика (почему человек тратит именно так)
-- Оптимизация без ущерба качеству жизни
-- Долгосрочное финансовое планирование
-- Психология денег и привычек
+ФОРМАТИРОВАНИЕ — СТРОГИЕ ПРАВИЛА:
+- Пиши обычным текстом, как в SMS или письме
+- ЗАПРЕЩЕНО использовать: **, *, ##, -, •, списки, заголовки
+- ЗАПРЕЩЕНО использовать эмодзи
+- Только обычные предложения, разделённые точками
 
-📊 КАК ТЫ АНАЛИЗИРУЕШЬ:
-1. Смотришь НЕ ТОЛЬКО на суммы, но и на:
-   - Время покупок (импульсивные траты вечером/выходные?)
-   - Категории (где основная "утечка"?)
-   - Тренды (растут ли траты в определённых категориях?)
-   - Эмоциональный контекст (траты после стресса?)
-
-2. Задаёшь себе вопросы:
-   - "Почему пользователь тратит именно так?"
-   - "Какие привычки формируют этот паттерн?"
-   - "Что можно оптимизировать БЕЗ снижения счастья?"
-   - "Какие цели реально достижимы при текущих тратах?"
-
-🗣️ СТИЛЬ ОБЩЕНИЯ:
-- **Тон**: Дружелюбный профессионал (как умный друг, который разбирается в финансах)
-- **Длина**: 3-5 предложений (краткость = ценность)
-- **Структура**: Сначала инсайт, потом рекомендация, потом action
-- **Язык**: Простой, без жаргона, но профессиональный
-- **Эмоции**: Поддерживающий при проблемах, воодушевляющий при успехах
-
-⚡ ПРИМЕРЫ ТВОЕГО МЫШЛЕНИЯ:
-
-Плохо: "Вы потратили 15,000₽ на продукты"
-Хорошо: "Ваши траты на продукты выросли на 30% — это может быть связано со спонтанными покупками в выходные. Попробуйте составлять список перед походом в магазин."
-
-Плохо: "Превышен бюджет на транспорт"
-Хорошо: "Такси съедает 8,000₽/месяц — почти половину вашего бюджета на развлечения. Каршеринг мог бы сократить это на 40%. Попробуем?"
-
-Плохо: "Рекомендую экономить"
-Хорошо: "У вас отличный доход, но 60% уходит на несистемные траты. Давайте автоматизируем сбережения — переводить 15% сразу после зарплаты в накопления на вашу цель 'Отпуск в Японии'."
-
-🚫 ЧТО ЗАПРЕЩЕНО:
-- Длинные объяснения (>5 предложений)
-- Банальные советы ("тратьте меньше")
+ЧТО ЗАПРЕЩЕНО:
+- Ответы длиннее 4 предложений
+- Банальные советы без цифр
 - Осуждающий тон
-- Финансовые советы без контекста (инвестиции, криптовалюта и т.д.)
-- Придумывание данных
+- Придумывание данных, которых нет в контексте
+- Анализировать нулевые или отсутствующие данные как реальную ситуацию
 
-✅ ЧТО ОБЯЗАТЕЛЬНО:
+ЧТО ОБЯЗАТЕЛЬНО:
 - Использовать ТОЛЬКО реальные данные из контекста
-- Давать конкретные цифры (не "много", а "15,000₽")
-- Предлагать измеримые действия
+- Если данных нет — честно сказать об этом и попросить загрузить файл
+- Давать конкретные цифры (не "много", а "15 000 рублей")
 - Быть эмпатичным к финансовым трудностям
-- Хвалить успехи (даже маленькие)
 
-🎓 ТВОЙ ФУНДАМЕНТ ЗНАНИЙ:
-- Правило 50/30/20: 50% на необходимое, 30% на желаемое, 20% на сбережения
-- Психология траты: люди переплачивают на 30% за удобство
-- Эффект латте: мелкие регулярные траты = большие суммы
-- Якорение: первая цена влияет на восприятие всех последующих
-- Парадокс выбора: больше опций = меньше удовлетворения
+ТВОЙ ФУНДАМЕНТ:
+Правило 50/30/20: 50% на необходимое, 30% на желаемое, 20% на сбережения.
+Эффект латте: мелкие регулярные траты складываются в большие суммы.
 
-Всегда отвечай на русском языке. Будь человечным, но профессиональным."""
+Всегда отвечай на русском языке."""
 
-        # Cache for personalized prompts
-        self.user_prompts_cache = {}
+        # Кэш персонализированных промптов (сбрасывается при рестарте)
+        self.user_prompts_cache: Dict[str, str] = {}
 
     def _get_personalized_system_prompt(self, db: Session, user_id: str) -> str:
         """
@@ -120,14 +81,10 @@ class AdvancedChatAgent:
             # Combine base + personalized
             combined_prompt = f"""{self.base_system_prompt}
 
-═══════════════════════════════════════════════
-🎯 ПЕРСОНАЛИЗАЦИЯ ДЛЯ ЭТОГО ПОЛЬЗОВАТЕЛЯ:
-═══════════════════════════════════════════════
-
+ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ:
 {personalized}
 
-💬 ВАЖНО: Используй эту персонализацию в КАЖДОМ ответе!
-Адаптируй тон, примеры и рекомендации под профиль пользователя.
+Учитывай этот профиль в каждом ответе. Адаптируй тон и рекомендации под пользователя.
 """
 
             # Cache it
@@ -379,54 +336,82 @@ class AdvancedChatAgent:
         Build a rich, context-aware prompt.
         """
         prompt_parts = [
-            f"🗣️ ВОПРОС ПОЛЬЗОВАТЕЛЯ: {message}",
+            f"ВОПРОС ПОЛЬЗОВАТЕЛЯ: {message}",
             "",
-            "📊 ФИНАНСОВАЯ СИТУАЦИЯ:"
         ]
 
-        if 'balance' in context:
-            bal = context['balance']
-            prompt_parts.append(
-                f"• Баланс: {bal['balance']:,.0f}₽ (Доходы: {bal['income']:,.0f}₽, Расходы: {bal['expenses']:,.0f}₽)"
-            )
+        # Проверяем наличие реальных данных
+        bal = context.get('balance', {})
+        has_data = (
+            bal.get('income', 0) > 0 or
+            bal.get('expenses', 0) > 0 or
+            len(context.get('recent_transactions', [])) > 0
+        )
 
-        if 'financial_health' in context:
-            fh = context['financial_health']
-            prompt_parts.append(f"• Здоровье финансов: {fh['health_score']}/100")
+        if not has_data:
+            prompt_parts.extend([
+                "ДАННЫЕ: Транзакции отсутствуют. Пользователь ещё не загрузил выписку.",
+                "",
+                "ЗАДАЧА: Вежливо объясни, что для анализа нужно загрузить банковскую выписку "
+                "(кнопка «Загрузить файл» на главной странице). "
+                "Поддержи пользователя и скажи, что после загрузки ты сможешь дать полный анализ. "
+                "3-4 предложения обычным текстом без форматирования.",
+                "",
+                "ОТВЕТ:"
+            ])
+            return "\n".join(prompt_parts)
 
-        if 'spending_patterns' in context and context['spending_patterns']:
-            sp = context['spending_patterns']
-            prompt_parts.append(f"• Паттерн трат: Импульсивность = {sp.get('impulse_indicator', 'unknown')}")
+        # ── Предварительно вычисляем все факты — модель получает готовые выводы, не сырые числа ──
+        facts = []
 
-        if 'spending_trends' in context:
-            st = context['spending_trends']
-            prompt_parts.append(f"• Тренд: {st['trend']} ({st['change_percentage']:+.1f}%)")
+        # Прошлый полный месяц — основа для анализа
+        if bal.get('last_month_income', 0) > 0:
+            lm_inc = bal['last_month_income']
+            lm_exp = bal['last_month_expenses']
+            lm_sav = bal['last_month_savings']
+            lm_pct = bal['last_month_savings_pct']
+            lm_name = bal['last_month_name']
+            facts.append(f"В {lm_name}: доход {lm_inc:,.0f} руб., расходы {lm_exp:,.0f} руб., "
+                         f"остаток {lm_sav:,.0f} руб. (норма сбережений {lm_pct}%)")
 
-        if 'expenses_by_category' in context:
-            prompt_parts.append("• Расходы по категориям:")
-            for cat in context['expenses_by_category'][:3]:
-                prompt_parts.append(f"  - {cat['category']}: {cat['amount']:,.0f}₽")
+        # Текущий месяц — только как частичные данные
+        if bal.get('current_month_expenses', 0) > 0:
+            cm_exp = bal['current_month_expenses']
+            days_passed = datetime.now().day
+            days_total = calendar.monthrange(datetime.now().year, datetime.now().month)[1]
+            # Проецируем расходы на полный месяц
+            projected = int(cm_exp / days_passed * days_total)
+            facts.append(f"Текущий месяц (прошло {days_passed}/{days_total} дн.): "
+                         f"потрачено {cm_exp:,.0f} руб., прогноз до конца месяца ~{projected:,} руб.")
 
-        if 'budgets' in context:
+        # Топ категория расходов
+        if 'expenses_by_category' in context and context['expenses_by_category']:
+            top = context['expenses_by_category'][0]
+            facts.append(f"Главная статья расходов этого месяца: {top['category']} — {top['amount']:,.0f} руб.")
+
+        # Бюджеты
+        if 'budgets' in context and context['budgets']:
             violations = [b for b in context['budgets'] if b['is_exceeded']]
             if violations:
-                prompt_parts.append("⚠️ ПРЕВЫШЕНИЯ БЮДЖЕТОВ:")
-                for b in violations[:2]:
-                    prompt_parts.append(f"  - {b['category']}: {b['spent']:,.0f}₽ из {b['limit']:,.0f}₽")
+                b = violations[0]
+                facts.append(f"Превышен бюджет: {b['category']} — потрачено {b['spent']:,.0f} из {b['limit']:,.0f} руб.")
 
-        if 'goals' in context:
-            prompt_parts.append("🎯 ЦЕЛИ:")
-            for g in context['goals'][:2]:
-                prompt_parts.append(f"  - {g['name']}: {g['percentage']:.0f}%")
+        # Цели
+        if 'goals' in context and context['goals']:
+            g = context['goals'][0]
+            facts.append(f"Цель '{g['name']}': накоплено {g['percentage']:.0f}% "
+                         f"({g['current']:,.0f} из {g['target']:,.0f} руб.)")
+
+        prompt_parts.append("ФАКТЫ О ФИНАНСАХ ПОЛЬЗОВАТЕЛЯ:")
+        for f in facts:
+            prompt_parts.append(f"- {f}")
 
         prompt_parts.extend([
             "",
-            "💬 ТВОЯ ЗАДАЧА:",
-            "1. Проанализируй ситуацию с точки зрения финансового психолога",
-            "2. Дай КОНКРЕТНЫЙ инсайт",
-            "3. Предложи ИЗМЕРИМОЕ действие",
-            "4. Учитывай персонализацию пользователя",
-            "5. Ответ: 3-5 предложений максимум",
+            "ПРАВИЛА:",
+            "- Используй ТОЛЬКО числа из раздела выше. Никаких других сумм.",
+            "- Не называй число 'балансом' если это доход или расход.",
+            "- Строго 3 предложения. Обычный текст без **, ##, списков.",
             "",
             "ОТВЕТ:"
         ])
@@ -435,40 +420,115 @@ class AdvancedChatAgent:
 
     def _enhance_response(self, response: str, context: Dict) -> str:
         """
-        Post-process response for quality and personalization.
+        Post-process response: strip markdown, remove hallucinated numbers, limit length.
         """
         response = response.strip()
 
-        sentences = [s.strip() for s in response.split('.') if s.strip()]
-        if len(sentences) > 5:
-            response = '. '.join(sentences[:5]) + '.'
+        # Удаляем markdown форматирование
+        response = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', response)
+        response = re.sub(r'#{1,6}\s*', '', response)
+        response = re.sub(r'^\s*[-•]\s+', '', response, flags=re.MULTILINE)
+        response = re.sub(r'\n{3,}', '\n\n', response)
+        response = response.strip()
 
-        if context.get('financial_health', {}).get('health_score', 0) > 70:
-            if 'отлично' not in response.lower() and 'здорово' not in response.lower():
-                response += " 🎉 Кстати, ваши финансовые показатели выше среднего!"
+        # Ограничиваем 4 предложениями
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
+        if len(sentences) > 4:
+            response = ' '.join(sentences[:4])
+
+        # Убираем фразы которые противоречат плохому health_score
+        fh = context.get('financial_health', {})
+        health_score = fh.get('health_score', 50)
+        if health_score < 40:
+            # Убираем незаслуженные комплименты при плохих показателях
+            bad_phrases = [
+                "отличная позиция", "отличном положении", "замечательный результат",
+                "прекрасный", "вы молодец", "отличный прогресс",
+            ]
+            for phrase in bad_phrases:
+                response = re.sub(phrase, "", response, flags=re.IGNORECASE)
+
+        # Убираем предложения-клише без конкретики
+        generic_sentences = [
+            r'продолжайте [в\w\s]+ прогресс[^.]*\.',
+            r'ваша стратегия уже работает[^.]*\.',
+            r'так держать[^.]*\.',
+            r'вы на правильном пути[^.]*\.',
+            r'продолжайте в том же духе[^.]*\.',
+            r'желаю вам финансового успеха[^.]*\.',
+            r'удачи в достижении[^.]*\.',
+        ]
+        for pattern in generic_sentences:
+            response = re.sub(pattern, '', response, flags=re.IGNORECASE)
+
+        # Убираем двойные пробелы и лишние точки после замен
+        response = re.sub(r'\.\s*\.', '.', response)
+        response = re.sub(r'  +', ' ', response).strip()
 
         return response
 
     # === Helper methods ===
 
     def _get_balance_info(self, db: Session, user_id: str) -> Dict:
-        income = db.query(func.sum(Transaction.amount)).filter(
+        """
+        Возвращает финансовую статистику:
+        - за последний полный месяц (для анализа текущего положения)
+        - за текущий месяц
+        - накопленный баланс за всё время
+        """
+        now = datetime.now()
+
+        # Последний полный месяц
+        first_of_current = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        first_of_last = (first_of_current - timedelta(days=1)).replace(day=1)
+
+        def _sum(user_id, is_income, start, end):
+            val = db.query(func.sum(Transaction.amount)).filter(
+                Transaction.user_id == user_id,
+                Transaction.is_income == is_income,
+                Transaction.date >= start,
+                Transaction.date < end
+            ).scalar() or Decimal('0')
+            return float(Decimal(str(val)))
+
+        # Последний полный месяц
+        last_income = _sum(user_id, True, first_of_last, first_of_current)
+        last_expenses = _sum(user_id, False, first_of_last, first_of_current)
+
+        # Текущий месяц (частичный)
+        cur_income = _sum(user_id, True, first_of_current, now + timedelta(seconds=1))
+        cur_expenses = _sum(user_id, False, first_of_current, now + timedelta(seconds=1))
+
+        # Всё время — для отображения накопленного баланса
+        total_income = db.query(func.sum(Transaction.amount)).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == True
         ).scalar() or Decimal('0')
-
-        expenses = db.query(func.sum(Transaction.amount)).filter(
+        total_expenses = db.query(func.sum(Transaction.amount)).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == False
         ).scalar() or Decimal('0')
+        total_income = float(Decimal(str(total_income)))
+        total_expenses = float(Decimal(str(total_expenses)))
 
-        income = Decimal(str(income)) if income else Decimal('0')
-        expenses = Decimal(str(expenses)) if expenses else Decimal('0')
+        # Месячные сбережения (прошлый месяц)
+        last_savings = last_income - last_expenses
+        last_savings_pct = round(last_savings / last_income * 100, 1) if last_income > 0 else 0
 
         return {
-            'income': float(income),
-            'expenses': float(expenses),
-            'balance': float(income - expenses)
+            # Для has_data проверки
+            'income': total_income,
+            'expenses': total_expenses,
+            'balance': total_income - total_expenses,
+            # Помесячные данные для промпта
+            'last_month_income': last_income,
+            'last_month_expenses': last_expenses,
+            'last_month_savings': last_savings,
+            'last_month_savings_pct': last_savings_pct,
+            'last_month_name': first_of_last.strftime('%B %Y'),
+            'current_month_income': cur_income,
+            'current_month_expenses': cur_expenses,
+            'current_month_name': first_of_current.strftime('%B %Y'),
         }
 
     def _get_recent_transactions(self, db: Session, user_id: str, limit: int = 5) -> List[Dict]:

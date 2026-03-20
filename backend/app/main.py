@@ -62,32 +62,69 @@ async def startup_event():
 
     db = SessionLocal()
     try:
-        # Check if categories exist
-        count = db.query(Category).count()
-        if count == 0:
-            logger.info("📦 Initializing default categories...")
-            default_categories = [
-                Category(name="Продукты", type="expense", icon="🛒",
-                         keywords=["продукт", "магазин", "супермаркет", "пятерочка", "магнит", "перекрёсток"]),
-                Category(name="Транспорт", type="expense", icon="🚗",
-                         keywords=["такси", "uber", "яндекс", "метро", "транспорт", "бензин", "каршеринг"]),
-                Category(name="Развлечения", type="expense", icon="🎬",
-                         keywords=["кино", "развлечение", "игры", "spotify", "подписка"]),
-                Category(name="Здоровье", type="expense", icon="💊",
-                         keywords=["аптека", "врач", "лекарство", "медицина", "больница"]),
-                Category(name="Одежда", type="expense", icon="👕",
-                         keywords=["одежда", "обувь", "магазин одежды", "zara", "h&m"]),
-                Category(name="Кафе и рестораны", type="expense", icon="☕",
-                         keywords=["кафе", "ресторан", "еда", "доставка", "макдональдс", "кфс"]),
-                Category(name="Зарплата", type="income", icon="💰",
-                         keywords=["зарплата", "salary", "аванс", "премия"]),
-                Category(name="Прочее", type="expense", icon="📦", keywords=[]),
-            ]
-            db.add_all(default_categories)
+        # Полный список категорий с корректными ключевыми словами
+        all_categories = [
+            Category(name="Продукты", type="expense", icon="🛒",
+                     keywords=["продукт", "супермаркет", "пятёрочка", "пятерочка", "магнит",
+                               "перекрёсток", "вкусвилл", "лента", "ашан", "дикси", "гастроном"]),
+            Category(name="Транспорт", type="expense", icon="🚗",
+                     keywords=["такси", "uber", "метро", "транспорт", "бензин", "каршеринг",
+                               "автобус", "электричка", "аэрофлот", "ржд", "авиабилет", "парковка"]),
+            Category(name="Развлечения", type="expense", icon="🎬",
+                     keywords=["кино", "развлечение", "игры", "spotify", "netflix", "youtube premium",
+                               "театр", "музей", "концерт", "билет"]),
+            Category(name="Здоровье", type="expense", icon="💊",
+                     keywords=["аптека", "врач", "лекарство", "медицина", "больница",
+                               "клиника", "стоматолог", "анализ"]),
+            Category(name="Одежда", type="expense", icon="👕",
+                     keywords=["одежда", "обувь", "zara", "h&m", "унiqlo", "lacoste"]),
+            Category(name="Кафе и рестораны", type="expense", icon="☕",
+                     keywords=["кафе", "ресторан", "доставка еды", "макдоналдс", "kfc", "бургер",
+                               "пицца", "суши", "фастфуд", "столовая"]),
+            Category(name="Красота", type="expense", icon="💅",
+                     keywords=["парикмахер", "стрижка", "маникюр", "педикюр", "косметика",
+                               "салон красоты", "химчистка", "spa", "спа"]),
+            Category(name="Спорт", type="expense", icon="🏋️",
+                     keywords=["спортзал", "фитнес", "бассейн", "тренажёр", "спорттовары",
+                               "абонемент", "йога", "секция"]),
+            Category(name="ЖКХ и связь", type="expense", icon="🏠",
+                     keywords=["коммунальные", "жкх", "квартплата", "электричество", "газ",
+                               "вода", "интернет", "телефон", "мобильная связь", "пополнение"]),
+            Category(name="Путешествия", type="expense", icon="✈️",
+                     keywords=["отель", "гостиница", "хостел", "airbnb", "экскурсия",
+                               "тур", "виза", "страховка"]),
+            Category(name="Зарплата", type="income", icon="💰",
+                     keywords=["зарплата", "salary", "аванс", "премия", "оклад"]),
+            Category(name="Прочее", type="expense", icon="📦", keywords=[]),
+        ]
+
+        existing_names = {c.name for c in db.query(Category.name).all()}
+        created = 0
+
+        if not existing_names:
+            # Первый запуск — создаём все
+            db.add_all(all_categories)
             db.commit()
-            logger.info(f"✅ Created {len(default_categories)} default categories")
+            created = len(all_categories)
+            logger.info(f"✅ Created {created} default categories")
         else:
-            logger.info(f"✅ Found {count} existing categories")
+            # Добавляем только отсутствующие + обновляем ключевые слова существующих
+            for cat_def in all_categories:
+                if cat_def.name not in existing_names:
+                    db.add(cat_def)
+                    created += 1
+                    logger.info(f"   ➕ Added missing category: {cat_def.name}")
+                else:
+                    # Обновляем keywords для существующих (убираем "магазин" и др. проблемные слова)
+                    existing = db.query(Category).filter(Category.name == cat_def.name).first()
+                    if existing and cat_def.keywords:
+                        existing.keywords = cat_def.keywords
+            if created > 0:
+                db.commit()
+                logger.info(f"✅ Added {created} new categories")
+
+            total = db.query(Category).count()
+            logger.info(f"✅ Found {total} categories total")
     except Exception as e:
         logger.error(f"❌ Error initializing categories: {e}")
         db.rollback()

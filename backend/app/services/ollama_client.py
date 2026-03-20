@@ -1,10 +1,21 @@
 import httpx
 import json
+import re
 from typing import List, Dict, Optional, AsyncIterator
 from backend.app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_thinking(text: str) -> str:
+    """
+    Удаляет блоки <think>...</think> из ответов thinking-моделей
+    (Qwen3, DeepSeek-R1 и др.).
+    Применяется всегда — для обычных моделей просто нет таких тегов.
+    """
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    return cleaned.strip()
 
 
 class OllamaClient:
@@ -29,7 +40,8 @@ class OllamaClient:
             system_prompt: Optional[str] = None,
             temperature: float = 0.7,
             max_tokens: int = 500,
-            stream: bool = False
+            stream: bool = False,
+            disable_thinking: bool = False
     ) -> str:
         """
         Генерирует ответ от модели.
@@ -40,17 +52,24 @@ class OllamaClient:
             temperature: Температура генерации (0.0-1.0)
             max_tokens: Максимальная длина ответа
             stream: Включить потоковую передачу
+            disable_thinking: Отключить thinking-режим (для Qwen3/DeepSeek-R1)
         """
         url = f"{self.base_url}/api/generate"
+
+        # Qwen3/DeepSeek-R1: отключаем thinking ВСЕГДА через /no_think префикс.
+        # think:false в payload не работает в ряде версий Ollama —
+        # /no_think в тексте промпта — единственный надёжный способ.
+        prompt = "/no_think\n" + prompt
 
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": stream,
+            "think": False,          # top-level (для новых версий Ollama)
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
-            }
+            },
         }
 
         if system_prompt:
@@ -67,7 +86,9 @@ class OllamaClient:
                 pass
             else:
                 result = response.json()
-                return result.get("response", "")
+                raw = result.get("response", "") or result.get("thinking", "")
+                cleaned = _strip_thinking(raw)
+                return cleaned
 
         except httpx.HTTPError as e:
             logger.error(f"Ollama HTTP error: {e}")
@@ -80,7 +101,8 @@ class OllamaClient:
             self,
             messages: List[Dict[str, str]],
             temperature: float = 0.7,
-            max_tokens: int = 500
+            max_tokens: int = 500,
+            disable_thinking: bool = False
     ) -> str:
         """
         Отправляет чат-запрос с историей сообщений.
@@ -99,8 +121,12 @@ class OllamaClient:
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
-            }
+            },
         }
+
+        # think: false — в КОРНЕ payload
+        if disable_thinking:
+            payload["think"] = False
 
         try:
             logger.debug(f"Sending chat request to Ollama with {len(messages)} messages")
@@ -110,7 +136,9 @@ class OllamaClient:
 
             result = response.json()
             message = result.get("message", {})
-            return message.get("content", "")
+            raw = message.get("content", "") or message.get("thinking", "")
+            cleaned = _strip_thinking(raw)
+            return cleaned
 
         except httpx.HTTPError as e:
             logger.error(f"Ollama chat HTTP error: {e}")

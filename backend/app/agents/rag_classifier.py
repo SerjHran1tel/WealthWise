@@ -24,9 +24,9 @@ class RAGClassifier:
     def __init__(self):
         # Кэш: description_clean -> (category_id, timestamp)
         self._description_cache: Dict[str, tuple] = {}
-        # Кэш категорий из БД: [{"id": ..., "name": ..., "keywords": ...}]
-        self._categories_cache: Optional[List[Dict]] = None
-        self._categories_cache_ts: float = 0
+        # Раздельный кэш категорий: expense_only=True и expense_only=False
+        self._categories_cache: Dict[bool, List] = {}
+        self._categories_cache_ts: Dict[bool, float] = {}
         # Статистика
         self.stats = {"hits": 0, "misses": 0, "llm_calls": 0, "rule_fallbacks": 0}
 
@@ -54,23 +54,28 @@ class RAGClassifier:
         self._description_cache[key] = (category_id, time.time())
 
     def _get_categories_cached(self, db: Session, expense_only: bool = True) -> List:
-        """Кэшированный запрос категорий из БД"""
+        """Кэшированный запрос категорий из БД (раздельный кэш для expense/all)"""
         now = time.time()
-        if self._categories_cache is None or (now - self._categories_cache_ts) > CACHE_TTL:
+        last_ts = self._categories_cache_ts.get(expense_only, 0)
+        if expense_only not in self._categories_cache or (now - last_ts) > CACHE_TTL:
             query = db.query(Category)
             if expense_only:
                 query = query.filter(Category.type == "expense")
-            self._categories_cache = query.all()
-            self._categories_cache_ts = now
-            logger.debug(f"Categories cache refreshed: {len(self._categories_cache)} categories")
-        return self._categories_cache
+            self._categories_cache[expense_only] = query.all()
+            self._categories_cache_ts[expense_only] = now
+            logger.debug(
+                f"Categories cache refreshed (expense_only={expense_only}): "
+                f"{len(self._categories_cache[expense_only])} categories"
+            )
+        return self._categories_cache[expense_only]
 
     async def categorize_with_rag(
             self,
             db: Session,
             user_id: str,
             description: str,
-            amount: float
+            amount: float,
+            is_income: bool = False
     ) -> Optional[str]:
         """
         Категоризация транзакции с использованием RAG.
@@ -78,18 +83,20 @@ class RAGClassifier:
         Этапы:
         1. Проверка TTL-кэша
         2. Проверка точного совпадения в истории (Adaptive Learning)
-        3. Поиск похожих транзакций (Semantic Search)
-        4. Анализ с помощью LLM (RAG)
+        3. [только расходы] Поиск похожих транзакций (Semantic Search)
+        4. [только расходы] Анализ с помощью LLM (RAG)
         5. Fallback на правила
         """
         if not description:
             return None
 
         description_clean = description.strip().lower()
+        # Ключ кэша учитывает тип транзакции, чтобы доходы и расходы не смешивались
+        cache_key = f"{'inc' if is_income else 'exp'}:{description_clean}"
         self.stats["misses"] += 1
 
         # 0. ПРОВЕРКА КЭША (TTL)
-        cached = self._get_from_cache(description_clean)
+        cached = self._get_from_cache(cache_key)
         if cached:
             self.stats["misses"] -= 1  # Отменяем, это был hit
             return cached
@@ -97,29 +104,37 @@ class RAGClassifier:
         # 1. ТОЧНОЕ СОВПАДЕНИЕ (быстрый путь)
         exact_match = self._find_exact_match(db, user_id, description_clean)
         if exact_match:
-            self._put_to_cache(description_clean, exact_match)
+            self._put_to_cache(cache_key, exact_match)
             return exact_match
 
-        # 2. ПОИСК ПОХОЖИХ ТРАНЗАКЦИЙ
+        # 2. Для доходов — только правила (не вызываем LLM с расходными категориями)
+        if is_income:
+            self.stats["rule_fallbacks"] += 1
+            rule_result = self._rule_based_categorization(db, description_clean, expense_only=False)
+            if rule_result:
+                self._put_to_cache(cache_key, rule_result)
+            return rule_result
+
+        # 3. ПОИСК ПОХОЖИХ ТРАНЗАКЦИЙ (только для расходов)
         similar_transactions = self._find_similar_transactions(
             db, user_id, description_clean, limit=5
         )
 
-        # 3. RAG: Используем LLM для категоризации на основе контекста
+        # 4. RAG: Используем LLM для категоризации на основе контекста
         self.stats["llm_calls"] += 1
         category_id = await self._categorize_with_llm(
             db, description, amount, similar_transactions
         )
 
         if category_id:
-            self._put_to_cache(description_clean, category_id)
+            self._put_to_cache(cache_key, category_id)
             return category_id
 
-        # 4. FALLBACK: Правила на основе ключевых слов
+        # 5. FALLBACK: Правила на основе ключевых слов
         self.stats["rule_fallbacks"] += 1
-        rule_result = self._rule_based_categorization(db, description_clean)
+        rule_result = self._rule_based_categorization(db, description_clean, expense_only=True)
         if rule_result:
-            self._put_to_cache(description_clean, rule_result)
+            self._put_to_cache(cache_key, rule_result)
         return rule_result
 
     def _find_exact_match(
@@ -199,15 +214,35 @@ class RAGClassifier:
                 max_tokens=50
             )
 
-            predicted_category = response.strip().strip('"').strip("'")
+            # Извлекаем последнюю непустую строку — модель иногда пишет объяснение перед ответом
+            lines = [l.strip().strip('"').strip("'") for l in response.strip().split('\n') if l.strip()]
+            predicted_category = lines[-1] if lines else ""
 
-            # Ищем в кэшированных категориях сначала
+            # Если последняя строка содержит "Категория: X" — берём X
+            if ':' in predicted_category:
+                predicted_category = predicted_category.split(':')[-1].strip().strip('"').strip("'")
+
+            # Модель сказала что не знает — честный None лучше неверной категории
+            no_match_signals = {"нет", "none", "не знаю", "нет подходящей", "unknown", "other", "другое", "-", ""}
+            if predicted_category.lower() in no_match_signals:
+                logger.info(f"RAG: no suitable category for '{description}'")
+                return None
+
+            # 1. Точное совпадение (без учёта регистра)
             for cat in categories:
                 if cat.name.lower() == predicted_category.lower():
                     logger.info(f"RAG categorized '{description}' as '{cat.name}'")
                     return cat.id
 
-            # Fallback на БД-запрос если кэш устарел
+            # 2. Нечёткое совпадение: название категории содержится в ответе или наоборот
+            predicted_lower = predicted_category.lower()
+            for cat in categories:
+                cat_lower = cat.name.lower()
+                if cat_lower in predicted_lower or predicted_lower in cat_lower:
+                    logger.info(f"RAG fuzzy match: '{description}' → '{cat.name}'")
+                    return cat.id
+
+            # 3. Fallback на БД-запрос если кэш устарел
             category = db.query(Category).filter(
                 func.lower(Category.name) == predicted_category.lower()
             ).first()
@@ -215,6 +250,8 @@ class RAGClassifier:
             if category:
                 logger.info(f"RAG categorized '{description}' as '{category.name}' (DB lookup)")
                 return category.id
+
+            logger.info(f"RAG: no match for predicted='{predicted_category}', description='{description}'")
 
         except Exception as e:
             logger.error(f"LLM categorization error: {e}", exc_info=True)
@@ -254,43 +291,79 @@ class RAGClassifier:
         prompt_parts.extend([
             "",
             "ИНСТРУКЦИЯ:",
-            "1. Проанализируй описание транзакции и сумму",
-            "2. Сравни с похожими транзакциями из истории",
-            "3. Выбери ОДНУ наиболее подходящую категорию из списка",
-            "4. Ответь ТОЛЬКО названием категории, без дополнительных слов",
+            "1. Проанализируй описание транзакции",
+            "2. Выбери ОДНУ подходящую категорию из списка выше",
+            "3. Если НИ ОДНА категория не подходит — ответь словом: нет",
+            "4. Ответь ТОЛЬКО названием категории (или 'нет'), без пояснений",
             "",
-            "ОТВЕТ (только название категории):"
+            "ОТВЕТ:"
         ])
 
         return "\n".join(prompt_parts)
 
+    # Ключевые слова которые НЕ должны матчить Продукты,
+    # даже если у той категории есть слово "магазин"
+    _GENERIC_KEYWORDS_BLACKLIST = {
+        'интернет-магазин', 'книжный магазин', 'спортивный магазин',
+        'магазин одежды', 'зоомагазин', 'магазин техники',
+    }
+
+    # Приоритетные правила: конкретные паттерны → категория
+    _PRIORITY_RULES: List[Dict] = [
+        # Маркетплейсы → Прочее (не Продукты)
+        {"keywords": ["ozon", "wildberries", "aliexpress", "lamoda", "яндекс.маркет", "wb "], "category": "Прочее"},
+        # Транспорт
+        {"keywords": ["uber", "bolt", "ситимобил", "яндекс.такси", "yandex taxi",
+                      "метро", "автобус", "электричка", "бензин", "заправка", "азс",
+                      "парковка", "автомойка", "авиабилет", "ржд", "аэрофлот"], "category": "Транспорт"},
+        # Продукты
+        {"keywords": ["пятёрочка", "пятерочка", "магнит", "перекрёсток", "лента", "вкусвилл",
+                      "ашан", "metro cash", "дикси", "продукты", "супермаркет"], "category": "Продукты"},
+        # Кафе и рестораны
+        {"keywords": ["kfc", "макдоналдс", "бургер кинг", "subway", "шаурма",
+                      "пиццерия", "суши", "доставка еды", "яндекс.еда", "delivery club"], "category": "Кафе и рестораны"},
+        # Здоровье
+        {"keywords": ["аптека", "pharmacy", "больница", "клиника", "стоматолог",
+                      "лекарства", "медицина", "анализы"], "category": "Здоровье"},
+        # Развлечения
+        {"keywords": ["netflix", "spotify", "youtube premium", "кинотеатр",
+                      "театр", "музей", "steam", "playstation", "xbox"], "category": "Развлечения"},
+        # Одежда
+        {"keywords": ["h&m", "zara", "uniqlo", "одежда", "обувь", "кроссовки"], "category": "Одежда"},
+        # Зарплата
+        {"keywords": ["зарплата", "аванс", "оклад", "премия", "выплата"], "category": "Зарплата"},
+    ]
+
     def _rule_based_categorization(
             self,
             db: Session,
-            description: str
+            description: str,
+            expense_only: bool = False
     ) -> Optional[str]:
         """Fallback: категоризация по правилам (ключевые слова)"""
-        categories = self._get_categories_cached(db, expense_only=False)
+        categories = self._get_categories_cached(db, expense_only=expense_only)
+        cat_by_name = {c.name: c for c in categories}
 
-        for cat in categories:
-            if not cat.keywords:
-                continue
-
-            for keyword in cat.keywords:
-                if keyword.lower() in description:
+        # 1. Приоритетные правила (запускаются ДО keyword-матчинга из БД)
+        for rule in self._PRIORITY_RULES:
+            if any(kw in description for kw in rule["keywords"]):
+                cat = cat_by_name.get(rule["category"])
+                if cat:
                     logger.info(f"Rule-based match: '{description}' → '{cat.name}'")
                     return cat.id
 
-        # Дополнительные жёсткие правила
-        if any(word in description for word in ['uber', 'yandex', 'такси']):
-            transport = next((c for c in categories if c.name == "Транспорт"), None)
-            if transport:
-                return transport.id
-
-        if any(word in description for word in ['пятерочка', 'магнит', 'перекрёсток']):
-            food = next((c for c in categories if c.name == "Продукты"), None)
-            if food:
-                return food.id
+        # 2. Keyword-матчинг из БД (пропускаем слишком общие слова)
+        SKIP_GENERIC = {"магазин", "shop", "store", "маркет", "рынок"}
+        for cat in categories:
+            if not cat.keywords:
+                continue
+            for keyword in cat.keywords:
+                kw = keyword.lower()
+                if kw in SKIP_GENERIC:
+                    continue
+                if kw in description:
+                    logger.info(f"Rule-based match: '{description}' → '{cat.name}'")
+                    return cat.id
 
         return None
 
@@ -313,7 +386,8 @@ class RAGClassifier:
     def clear_cache(self):
         """Очистка кэша (например, при изменении категорий)"""
         self._description_cache.clear()
-        self._categories_cache = None
+        self._categories_cache.clear()
+        self._categories_cache_ts.clear()
         logger.info("RAG classifier cache cleared")
 
 

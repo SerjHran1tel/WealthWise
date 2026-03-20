@@ -83,7 +83,8 @@ async def upload_transactions(
             # RAG-классификация: LLM + история + семантический поиск
             try:
                 cat_id = await rag_classifier.categorize_with_rag(
-                    db, user_id, item['description'], item['amount']
+                    db, user_id, item['description'], item['amount'],
+                    is_income=item.get('is_income', False)
                 )
             except Exception as rag_err:
                 logger.warning(f"RAG classifier failed, falling back to rule-based: {rag_err}")
@@ -202,6 +203,34 @@ async def get_transaction(
     return TransactionResponse.model_validate(txn)
 
 
+@router.delete("/all/clear")
+async def clear_all_transactions(
+        user_id: str = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    Удалить ВСЕ транзакции пользователя.
+    Используется для сброса данных перед повторным импортом.
+    """
+    try:
+        deleted = db.query(Transaction).filter(Transaction.user_id == user_id).delete()
+        db.commit()
+
+        # Сбрасываем кэш RAG классификатора
+        rag_classifier.clear_cache()
+
+        logger.info(f"Cleared {deleted} transactions for user {user_id}")
+        return {
+            "status": "success",
+            "deleted_count": deleted,
+            "message": f"Удалено {deleted} транзакций. Теперь загрузите файл заново."
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error clearing transactions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error clearing transactions: {str(e)}")
+
+
 @router.delete("/{transaction_id}")
 async def delete_transaction(
         transaction_id: str,
@@ -303,31 +332,3 @@ async def get_transactions_summary(
             "end": end_date.isoformat() if end_date else None
         }
     }
-
-
-@router.delete("/all/clear")
-async def clear_all_transactions(
-        user_id: str = Depends(get_current_user),
-        db: Session = Depends(get_db)
-):
-    """
-    Удалить ВСЕ транзакции пользователя.
-    Используется для сброса данных перед повторным импортом.
-    """
-    try:
-        deleted = db.query(Transaction).filter(Transaction.user_id == user_id).delete()
-        db.commit()
-
-        # Сбрасываем кэш RAG классификатора
-        rag_classifier.clear_cache()
-
-        logger.info(f"Cleared {deleted} transactions for user {user_id}")
-        return {
-            "status": "success",
-            "deleted_count": deleted,
-            "message": f"Удалено {deleted} транзакций. Теперь загрузите файл заново."
-        }
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error clearing transactions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error clearing transactions: {str(e)}")
