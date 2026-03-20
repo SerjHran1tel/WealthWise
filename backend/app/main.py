@@ -6,7 +6,7 @@ import uvicorn
 import logging
 
 from  backend.app.database import engine, Base
-from backend.app.routers import transactions, categories, budgets, goals, insights, chat, reports, profile
+from backend.app.routers import transactions, categories, budgets, goals, insights, chat, reports, profile, system
 from backend.app.services.scheduler import start_scheduler, stop_scheduler
 
 # Logging setup
@@ -43,6 +43,7 @@ app.include_router(insights.router)
 app.include_router(chat.router)
 app.include_router(reports.router)
 app.include_router(profile.router)  # 🔥 NEW: User profile for personalization
+app.include_router(system.router)   # 📊 System stats & hardware analysis
 
 # Static files (frontend)
 try:
