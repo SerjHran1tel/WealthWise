@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # Ollama настройки
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "qwen3.5:4b"
+    OLLAMA_MODEL: str = "wealthwise-finance"
     OLLAMA_TIMEOUT: int = 300
 
     # Пагинация

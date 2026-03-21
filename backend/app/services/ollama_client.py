@@ -70,6 +70,7 @@ class OllamaClient:
                 "temperature": temperature,
                 "num_predict": max_tokens,
             },
+            "stop": ["<|im_start|>", "<|im_end|>", "\nВопрос:", "\nUser:", "\nuser:", "Сколько я", "Какой у", "Трачу ли", "\nСледуй", "Следуй этому", "\nПример:", "\nШаблон:"],
         }
 
         if system_prompt:

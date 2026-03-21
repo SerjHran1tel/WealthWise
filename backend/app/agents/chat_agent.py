@@ -30,17 +30,18 @@ class ChatAgent:
 - Помощь в достижении финансовых целей
 
 ПРАВИЛА ОБЩЕНИЯ:
-1. Отвечай КРАТКО и КОНКРЕТНО (2-4 предложения)
+1. Отвечай РАЗВЁРНУТО: 4-7 предложений для финансовых вопросов
 2. Используй ФАКТЫ из предоставленных данных, когда речь о финансах
 3. Форматируй суммы с пробелами и знаком ₽ (например: 15 000 ₽)
 4. Будь дружелюбным, но профессиональным
 5. При отсутствии данных - честно признавай это
+6. Называй конкретные категории и суммы, не ограничивайся общими словами
+7. Давай 1-2 конкретных совета на основе данных
 
 ЧТО ЗАПРЕЩЕНО:
-- Длинные объяснения (>4 предложений)
 - Придумывание данных
 - Общие советы без контекста
-- Markdown форматирование (**, ##, -)
+- Markdown форматирование (**, ##, -, *)
 - Финансовые советы в стиле "купи акции"
 
 СТИЛЬ:
@@ -229,8 +230,13 @@ class ChatAgent:
             # Всегда добавляем базовую статистику
             context['balance'] = self._get_balance_info(db, user_id)
 
+            # Для общих вопросов о финансах — сразу показываем категории и топ трат
+            if any(word in msg_lower for word in ['финанс', 'ситуаци', 'обзор', 'как дела', 'статус', 'итог', 'сводк']):
+                context['expenses_by_category'] = self._get_expenses_by_category(db, user_id)
+                context['top_expenses'] = self._get_top_expenses(db, user_id, limit=3)
+
             # Если спрашивают про баланс или общую ситуацию
-            if any(word in msg_lower for word in ['баланс', 'сколько', 'деньги', 'ситуация', 'статус']):
+            if any(word in msg_lower for word in ['баланс', 'сколько', 'деньги', 'статус']):
                 context['recent_transactions'] = self._get_recent_transactions(db, user_id, limit=5)
 
             # Если спрашивают про расходы/категории
@@ -292,7 +298,7 @@ class ChatAgent:
             if 'balance' in context:
                 bal = context['balance']
                 prompt_parts.append(
-                    f"• Баланс: {self._format_amount(bal['balance'])} "
+                    f"• Общий баланс: {self._format_amount(bal['balance'])} "
                     f"(Доходы: {self._format_amount(bal['income'])}, Расходы: {self._format_amount(bal['expenses'])})"
                 )
 
@@ -344,7 +350,7 @@ class ChatAgent:
     # === Вспомогательные методы для сбора данных ===
 
     def _get_balance_info(self, db: Session, user_id: str) -> Dict:
-        """Получает информацию об общем балансе."""
+        """Получает информацию об общем балансе (всё время, как на дашборде)."""
         income = db.query(func.sum(Transaction.amount)).filter(
             Transaction.user_id == user_id,
             Transaction.is_income == True
